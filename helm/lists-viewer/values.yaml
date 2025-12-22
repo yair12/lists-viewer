@@ -39,18 +39,23 @@ service:
 
 ingress:
   enabled: false
-  className: "nginx"
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  entryPoints:
+    - web
+    - websecure
+  annotations: {}
   hosts:
     - host: lists-viewer.local
-      paths:
-        - path: /
-          pathType: Prefix
+      path: /
+  middlewares: []
+    # - compress
+    # - redirect-https
   tls:
-    - secretName: lists-viewer-tls
-      hosts:
-        - lists-viewer.local
+    certResolver: letsencrypt
+    # secretName: lists-viewer-tls  # Use this if you have a pre-existing cert
+    domains:
+      - main: lists-viewer.local
+        # sans:
+        #   - www.lists-viewer.local
 
 resources:
   limits:
