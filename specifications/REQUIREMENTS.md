@@ -16,9 +16,11 @@ The application is a todo list that support listing items inside list and suppor
   * updated by - required
   * quantity - optional
   * user icon id - required
+  * parent list id - required
   * order number - required the order number in the list. order can be changed
   * quantity type (for example: weigh in KG or GR, liters, milliliters, number etc...) - optional
   * Version, the item version should be maintained to avoid parallel update conflicts between users - required
+* items can be optionally grouped under another list - its kind of category grouping. the list itself is same list object but it can act as an "item" in another list. there should be max 2 levels of depth.
 * no need for application to connect with identity provider, no login needed, just user nick name is entered first time app start and cached locally.
 * List can be created and deleted, the name can be modified and short description
 * marked items can be unmarked and return to "open items" section
