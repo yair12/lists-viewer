@@ -15,6 +15,7 @@ The application is a todo list that support listing items inside list and suppor
   * created by - required
   * updated by - required
   * quantity - optional
+  * user icon id - required
   * order number - required the order number in the list. order can be changed
   * quantity type (for example: weigh in KG or GR, liters, milliliters, number etc...) - optional
   * Version, the item version should be maintained to avoid parallel update conflicts between users - required
@@ -48,7 +49,7 @@ Create proper git ignore file.
 
 ## Client Side
 * client side should be browser based application PWA to support both android and iOS as well as desktop.
-* client app initial screen should request user nick name which is cached locally.
+* client app initial screen should request user nick name and icon which is cached locally.
 * all server data is cached locally in case of offline scenario updates/deletes/creates should be kept in update list and once back online again, they should be synced according to conflict logic above.
 * item updated but not synced should be painted in different color to indicate they did not sync yet.
 * in the left section of the screen there should be expendable section containing the lists and mark the current list in view.
@@ -59,3 +60,4 @@ Create proper git ignore file.
 * inside list there is unmarked items section above and below marked items sections.
 * there should be a way to delete marked item one by one or all together.
 * there should be a way modify an item and create item once list is chosen.
+* maintain list of icons with ids that correlate to the users. show the icon somewhere inside the item section. show only last updated by user icon
