@@ -1,0 +1,28 @@
+# Development environment overrides
+replicaCount: 1
+
+image:
+  pullPolicy: IfNotPresent
+  tag: "dev"
+
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: false
+
+ingress:
+  enabled: true
+  hosts:
+    - host: lists-viewer.dev
+      paths:
+        - path: /
+          pathType: Prefix
+
+mongodb:
+  uri: "mongodb://root:rootpassword@mongodb:27017/lists_viewer?authSource=admin"

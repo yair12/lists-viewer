@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:5.0
+    container_name: lists-viewer-mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+      MONGO_INITDB_DATABASE: lists_viewer
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - lists-viewer-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: lists-viewer-backend
+    environment:
+      SERVER_PORT: 8080
+      MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/lists_viewer?authSource=admin
+      DATABASE_NAME: lists_viewer
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - lists-viewer-network
+    volumes:
+      - ./server:/app
+    command: go run ./cmd/server
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.dev
+    container_name: lists-viewer-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - lists-viewer-network
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api/v1
+    command: npm run dev
+
+volumes:
+  mongodb_data:
+  mongodb_config:
+
+networks:
+  lists-viewer-network:
+    driver: bridge
