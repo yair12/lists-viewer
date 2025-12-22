@@ -112,6 +112,9 @@ class SyncManager {
 
     this.isSyncing = true;
     this.notifyListeners('syncing');
+    
+    // Signal that sync is in progress (can be checked by queries)
+    (window as any).__syncInProgress = true;
 
     try {
       const pendingItems = await getPendingSyncItems();
@@ -148,6 +151,7 @@ class SyncManager {
       this.notifyListeners('error');
     } finally {
       this.isSyncing = false;
+      (window as any).__syncInProgress = false;
     }
   }
 

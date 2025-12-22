@@ -121,6 +121,17 @@ export default function ListView() {
     <DragDropContext onDragEnd={handleDragEnd}>
       <MainLayout>
         <Box>
+          {list.color && (
+            <Box
+              sx={{
+                height: 4,
+                bgcolor: list.color,
+                borderRadius: 1,
+                mb: 2,
+                boxShadow: `0 2px 8px ${list.color}40`,
+              }}
+            />
+          )}
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
             <IconButton onClick={() => navigate('/')} sx={{ mr: 1 }}>
               <ArrowBack />
@@ -142,7 +153,7 @@ export default function ListView() {
 
           <Divider sx={{ mb: 3 }} />
 
-          <ItemsList listId={listId!} />
+          <ItemsList listId={listId!} listColor={list.color} />
         </Box>
 
         <Menu

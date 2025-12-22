@@ -96,6 +96,7 @@ func (r *ListRepositoryImpl) Update(ctx context.Context, list *models.List) erro
 			"$set": bson.M{
 				"name":        list.Name,
 				"description": list.Description,
+				"color":       list.Color,
 				"updatedAt":   list.UpdatedAt,
 				"updatedBy":   list.UpdatedBy,
 				"version":     list.Version + 1,

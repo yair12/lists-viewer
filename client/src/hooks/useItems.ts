@@ -52,6 +52,14 @@ export const useItems = (listId: string | null, includeArchived = false) => {
     },
     enabled: !!listId,
     staleTime: 30000, // Consider data fresh for 30 seconds
+    refetchInterval: () => {
+      // Don't poll if sync is in progress or if mutations are active
+      if ((window as any).__syncInProgress || (window as any).__mutationInProgress) {
+        return false;
+      }
+      return 10000; // Poll every 10 seconds otherwise
+    },
+    refetchIntervalInBackground: false, // Don't poll when tab is not visible
     retry: false, // Don't retry failed requests
   });
 };

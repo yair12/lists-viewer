@@ -26,9 +26,10 @@ import type { Item } from '../../types';
 
 interface ItemsListProps {
   listId: string;
+  listColor?: string;
 }
 
-export default function ItemsList({ listId }: ItemsListProps) {
+export default function ItemsList({ listId, listColor }: ItemsListProps) {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [deleteCompletedDialogOpen, setDeleteCompletedDialogOpen] = useState(false);
@@ -135,6 +136,7 @@ export default function ItemsList({ listId }: ItemsListProps) {
                           <ItemRow 
                             item={item} 
                             listId={listId}
+                            listColor={listColor}
                           />
                         </div>
                       )}
@@ -154,7 +156,7 @@ export default function ItemsList({ listId }: ItemsListProps) {
               </Typography>
               <Box sx={{ opacity: 0.6 }}>
                 {completedItems.map((item: Item) => (
-                  <ItemRow key={item.id} item={item} listId={listId} />
+                  <ItemRow key={item.id} item={item} listId={listId} listColor={listColor} />
                 ))}
               </Box>
             </>

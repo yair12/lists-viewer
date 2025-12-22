@@ -13,6 +13,12 @@ export const usersApi = {
     const response = await apiClient.get<IconsResponse>('/icons');
     return response.data.data;
   },
+
+  // Update user icon
+  updateIcon: async (username: string, iconId: string): Promise<User> => {
+    const response = await apiClient.patch<User>(`/users/${username}/icon`, { iconId });
+    return response.data;
+  },
 };
 
 export default usersApi;

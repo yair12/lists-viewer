@@ -20,6 +20,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUpdateItem, useDeleteItem } from '../../hooks/useItems';
 import { useItemPendingSync } from '../../hooks/useSyncStatus';
+import { useIcons } from '../../hooks/useUser';
 import EditItemDialog from './EditItemDialog';
 import ConfirmDialog from '../Common/ConfirmDialog';
 import MoveItemDialog from './MoveItemDialog';
@@ -28,9 +29,10 @@ import type { Item } from '../../types';
 interface ItemRowProps {
   item: Item;
   listId: string;
+  listColor?: string;
 }
 
-export default function ItemRow({ item, listId }: ItemRowProps) {
+export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
   const navigate = useNavigate();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -39,11 +41,15 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
 
   const updateMutation = useUpdateItem();
   const deleteMutation = useDeleteItem();
+  const { data: icons = [] } = useIcons();
   
   // Check if this item has pending sync operations
   const { data: isPendingSync = false } = useItemPendingSync(item.id);
   const isTempId = item.id.startsWith('temp-');
   const showPendingIndicator = isTempId || isPendingSync;
+
+  // Get icon URL for the item's creator
+  const userIcon = icons.find(icon => icon.id === item.userIconId);
 
   const handleToggle = () => {
     updateMutation.mutate({
@@ -121,6 +127,7 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
         py: 1.5,
         px: 1,
         borderRadius: 1,
+        borderLeft: listColor ? `3px solid ${listColor}` : 'none',
         cursor: 'pointer',
         bgcolor: showPendingIndicator ? 'warning.dark' : 'transparent',
         '&:hover': {
@@ -137,6 +144,12 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
           checked={item.completed}
           onChange={handleToggle}
           disabled={updateMutation.isPending}
+          sx={{
+            '& .MuiSvgIcon-root': { 
+              fontSize: { xs: 32, sm: 28 } // Larger on mobile
+            },
+            p: { xs: 1.5, sm: 1 } // More padding on mobile for easier tapping
+          }}
         />
       )}
 
@@ -178,13 +191,14 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
             {formatDate(item.updatedAt)}
           </Typography>
           
-          {item.userIconId && (
+          {item.userIconId && userIcon && (
             <Avatar
+              src={userIcon.url}
+              alt={userIcon.name}
               sx={{
-                width: 20,
-                height: 20,
-                fontSize: '0.75rem',
-                bgcolor: 'primary.main',
+                width: { xs: 40, sm: 36 },
+                height: { xs: 40, sm: 36 },
+                fontSize: '1rem',
               }}
             >
               {item.createdBy?.charAt(0).toUpperCase() || '?'}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/yair12/lists-viewer/server/internal/api"
 	"github.com/yair12/lists-viewer/server/internal/models"
 	"github.com/yair12/lists-viewer/server/internal/service"
@@ -52,4 +53,53 @@ func (h *UserHandler) GetIcons(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(models.IconsResponse{Data: icons})
+}
+
+// UpdateUserIcon updates a user's icon
+// PATCH /api/v1/users/:username/icon
+func (h *UserHandler) UpdateUserIcon(w http.ResponseWriter, r *http.Request) {
+	// Try to get username from URL path
+	vars := mux.Vars(r)
+	username := vars["username"]
+
+	// If not in URL, try to get from header
+	if username == "" {
+		username = r.Header.Get("X-User-Id")
+	}
+
+	log.Printf("[HANDLER_UPDATE_ICON] Request received - URL: %s, Username from path: '%s', Username from header: '%s', Vars: %+v",
+		r.URL.Path, vars["username"], r.Header.Get("X-User-Id"), vars)
+
+	if username == "" {
+		log.Printf("[HANDLER_UPDATE_ICON] Username is empty!")
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "username is required", nil)
+		return
+	}
+
+	var req struct {
+		IconID string `json:"iconId"`
+	}
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		log.Printf("[HANDLER_UPDATE_ICON] Invalid request body: %v", err)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
+		return
+	}
+
+	if req.IconID == "" {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "iconId is required", nil)
+		return
+	}
+
+	log.Printf("[HANDLER_UPDATE_ICON] Updating icon for user: username=%s, iconId=%s", username, req.IconID)
+	user, err := h.service.UpdateUserIcon(r.Context(), username, req.IconID)
+	if err != nil {
+		log.Printf("[HANDLER_UPDATE_ICON] Service error: %v", err)
+		api.ErrorHandler(w, err)
+		return
+	}
+
+	log.Printf("[HANDLER_UPDATE_ICON] Successfully updated icon: username=%s", username)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
 }

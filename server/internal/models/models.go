@@ -12,6 +12,7 @@ type List struct {
 	UUID               string             `bson:"uuid" json:"uuid"`
 	Name               string             `bson:"name" json:"name"`
 	Description        string             `bson:"description" json:"description"`
+	Color              string             `bson:"color" json:"color"`
 	CreatedAt          time.Time          `bson:"createdAt" json:"createdAt"`
 	UpdatedAt          time.Time          `bson:"updatedAt" json:"updatedAt"`
 	CreatedBy          string             `bson:"createdBy" json:"createdBy"`
@@ -76,12 +77,14 @@ type Icon struct {
 type CreateListRequest struct {
 	Name        string `json:"name" binding:"required,min=1,max=255"`
 	Description string `json:"description" binding:"max=500"`
+	Color       string `json:"color" binding:"max=7"`
 }
 
 // UpdateListRequest represents a request to update a list
 type UpdateListRequest struct {
 	Name        string `json:"name" binding:"required,min=1,max=255"`
 	Description string `json:"description" binding:"max=500"`
+	Color       string `json:"color" binding:"max=7"`
 	Version     int32  `json:"version" binding:"required"`
 }
 

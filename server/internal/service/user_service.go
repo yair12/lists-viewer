@@ -95,10 +95,37 @@ func (s *UserService) mapUserToResponse(user *models.User) *models.UserResponse 
 // GetAvailableIcons returns the list of available icons
 func (s *UserService) GetAvailableIcons() []models.Icon {
 	return []models.Icon{
-		{ID: "icon1", Name: "Avatar 1", URL: "/icons/avatar1.png"},
-		{ID: "icon2", Name: "Avatar 2", URL: "/icons/avatar2.png"},
-		{ID: "icon3", Name: "Avatar 3", URL: "/icons/avatar3.png"},
-		{ID: "icon4", Name: "Avatar 4", URL: "/icons/avatar4.png"},
-		{ID: "icon5", Name: "Avatar 5", URL: "/icons/avatar5.png"},
+		{ID: "icon1", Name: "Avatar 1", URL: "/icons/avatar1.svg"},
+		{ID: "icon2", Name: "Avatar 2", URL: "/icons/avatar2.svg"},
+		{ID: "icon3", Name: "Avatar 3", URL: "/icons/avatar3.svg"},
+		{ID: "icon4", Name: "Avatar 4", URL: "/icons/avatar4.svg"},
+		{ID: "icon5", Name: "Avatar 5", URL: "/icons/avatar5.svg"},
 	}
+}
+
+// UpdateUserIcon updates a user's icon
+func (s *UserService) UpdateUserIcon(ctx context.Context, username string, iconID string) (*models.UserResponse, error) {
+	log.Printf("[SERVICE_UPDATE_ICON] Updating icon: username=%s, iconId=%s", username, iconID)
+
+	// Get existing user
+	user, err := s.repo.User.GetByUsername(ctx, username)
+	if err != nil {
+		log.Printf("[SERVICE_UPDATE_ICON] Error getting user: username=%s, error=%v", username, err)
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	if user == nil {
+		log.Printf("[SERVICE_UPDATE_ICON] User not found: username=%s", username)
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// Update icon
+	user.IconID = iconID
+	if err := s.repo.User.Update(ctx, user); err != nil {
+		log.Printf("[SERVICE_UPDATE_ICON] Failed to update user: username=%s, error=%v", username, err)
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	log.Printf("[SERVICE_UPDATE_ICON] Successfully updated icon: username=%s", username)
+	return s.mapUserToResponse(user), nil
 }

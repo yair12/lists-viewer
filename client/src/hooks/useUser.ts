@@ -118,11 +118,11 @@ export const useIcons = () => {
  */
 const getDefaultIcons = (): Icon[] => {
   return [
-    { id: 'icon1', name: 'Avatar 1', url: '/icons/avatar1.png' },
-    { id: 'icon2', name: 'Avatar 2', url: '/icons/avatar2.png' },
-    { id: 'icon3', name: 'Avatar 3', url: '/icons/avatar3.png' },
-    { id: 'icon4', name: 'Avatar 4', url: '/icons/avatar4.png' },
-    { id: 'icon5', name: 'Avatar 5', url: '/icons/avatar5.png' },
+    { id: 'icon1', name: 'Avatar 1', url: '/icons/avatar1.svg' },
+    { id: 'icon2', name: 'Avatar 2', url: '/icons/avatar2.svg' },
+    { id: 'icon3', name: 'Avatar 3', url: '/icons/avatar3.svg' },
+    { id: 'icon4', name: 'Avatar 4', url: '/icons/avatar4.svg' },
+    { id: 'icon5', name: 'Avatar 5', url: '/icons/avatar5.svg' },
   ];
 };
 

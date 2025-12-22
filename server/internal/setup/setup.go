@@ -50,6 +50,7 @@ func SetupRouter(dbClient *mongo.Client) http.Handler {
 
 	// User/Icon endpoints
 	api1.HandleFunc("/users/init", userHandler.InitUser).Methods("POST")
+	api1.HandleFunc("/users/{username}/icon", userHandler.UpdateUserIcon).Methods("PATCH")
 	api1.HandleFunc("/icons", userHandler.GetIcons).Methods("GET")
 
 	// List CRUD endpoints

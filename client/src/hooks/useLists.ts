@@ -45,6 +45,14 @@ export const useLists = () => {
       return [];
     },
     staleTime: 30000, // Consider data fresh for 30 seconds
+    refetchInterval: () => {
+      // Don't poll if sync is in progress or if mutations are active
+      if ((window as any).__syncInProgress || (window as any).__mutationInProgress) {
+        return false;
+      }
+      return 10000; // Poll every 10 seconds otherwise
+    },
+    refetchIntervalInBackground: false, // Don't poll when tab is not visible
     retry: false, // Don't retry failed requests
   });
 };
@@ -142,6 +150,7 @@ export const useUpdateList = () => {
 
   return useMutation({
     mutationFn: async ({ listId, data }: { listId: string; data: UpdateListRequest }) => {
+      (window as any).__mutationInProgress = true;
       try {
         console.log('[useUpdateList] 🌐 Making API call...');
         const updatedList = await listsApi.update(listId, data);
@@ -176,9 +185,20 @@ export const useUpdateList = () => {
       }
     },
     onSuccess: (data) => {
-      // Update cached queries
+      console.log('[useUpdateList] ✅ onSuccess - updating queries with:', data);
+      // Update cached queries immediately with the returned data
       queryClient.setQueryData(queryKeys.lists.detail(data.id), data);
+      queryClient.setQueryData(queryKeys.lists.all, (old: List[] | undefined) => {
+        if (!old) return [data];
+        return old.map(list => list.id === data.id ? data : list);
+      });
+      // Also invalidate to ensure consistency
       queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.lists.detail(data.id) });
+    },
+    onSettled: () => {
+      // Clear mutation flag after mutation completes (success or error)
+      (window as any).__mutationInProgress = false;
     },
   });
 };
@@ -193,8 +213,9 @@ export const useDeleteList = () => {
     mutationFn: async ({ listId, version }: { listId: string; version: number }) => {
       try {
         await listsApi.delete(listId, version);
-        // Remove from cache
+        // Remove from cache immediately
         await removeCachedList(listId);
+        console.log('[useDeleteList] ✅ Deleted list and removed from cache:', listId);
       } catch (error) {
         // If network error, add to sync queue
         if (isNetworkError(error)) {
@@ -210,9 +231,12 @@ export const useDeleteList = () => {
       }
     },
     onSuccess: (_, variables) => {
-      // Remove from cache and invalidate queries
+      // Remove from cache and invalidate queries immediately
       queryClient.removeQueries({ queryKey: queryKeys.lists.detail(variables.listId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
+      // Also clear the entire cache to force refetch
+      queryClient.refetchQueries({ queryKey: queryKeys.lists.all });
+      console.log('[useDeleteList] ✅ Queries invalidated and refetched');
     },
   });
 };

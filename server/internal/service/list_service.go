@@ -26,12 +26,13 @@ func (s *ListService) CreateList(ctx context.Context, req *models.CreateListRequ
 		UUID:        uuid.New().String(),
 		Name:        req.Name,
 		Description: req.Description,
+		Color:       req.Color,
 		UserID:      userID,
 		CreatedBy:   userID,
 		UpdatedBy:   userID,
 	}
 
-	log.Printf("[SERVICE_CREATE_LIST] Creating list: uuid=%s, name=%s, userID=%s", list.UUID, list.Name, userID)
+	log.Printf("[SERVICE_CREATE_LIST] Creating list: uuid=%s, name=%s, color=%s, userID=%s", list.UUID, list.Name, list.Color, userID)
 	if err := s.repo.List.Create(ctx, list); err != nil {
 		log.Printf("[SERVICE_CREATE_LIST] Failed to create list: uuid=%s, error=%v", list.UUID, err)
 		return nil, fmt.Errorf("failed to create list: %w", err)
@@ -74,7 +75,7 @@ func (s *ListService) GetAllLists(ctx context.Context, userID string) ([]models.
 
 // UpdateList updates a list
 func (s *ListService) UpdateList(ctx context.Context, listID string, req *models.UpdateListRequest, userID string) (*models.ListResponse, error) {
-	log.Printf("[SERVICE_UPDATE_LIST] Updating list: listID=%s, userID=%s, version=%d", listID, userID, req.Version)
+	log.Printf("[SERVICE_UPDATE_LIST] Updating list: listID=%s, userID=%s, version=%d, color=%s", listID, userID, req.Version, req.Color)
 	// Get existing list
 	existingList, err := s.repo.List.GetByID(ctx, listID, userID)
 	if err != nil {
@@ -94,9 +95,12 @@ func (s *ListService) UpdateList(ctx context.Context, listID string, req *models
 	}
 
 	// Update fields
+	log.Printf("[SERVICE_UPDATE_LIST] Before update - Name: %s, Color: %s", existingList.Name, existingList.Color)
 	existingList.Name = req.Name
 	existingList.Description = req.Description
+	existingList.Color = req.Color
 	existingList.UpdatedBy = userID
+	log.Printf("[SERVICE_UPDATE_LIST] After update - Name: %s, Color: %s", existingList.Name, existingList.Color)
 
 	if err := s.repo.List.Update(ctx, existingList); err != nil {
 		log.Printf("[SERVICE_UPDATE_LIST] Failed to update list: listID=%s, error=%v", listID, err)
@@ -132,6 +136,7 @@ func (s *ListService) mapListToResponse(list *models.List) *models.ListResponse 
 		ID:                 list.UUID,
 		Name:               list.Name,
 		Description:        list.Description,
+		Color:              list.Color,
 		CreatedAt:          list.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:          list.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		CreatedBy:          list.CreatedBy,
