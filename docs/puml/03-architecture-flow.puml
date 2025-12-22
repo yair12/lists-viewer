@@ -1,0 +1,53 @@
+@startuml Architecture Flow
+
+title Client-Side Cache Architecture Flow
+
+package "UI Layer" {
+    [React Components] as Components
+    [Custom Hooks\nuseLists, useItems, etc.] as Hooks
+}
+
+package "State Management Layer" {
+    [TanStack Query\nQueryClient] as RQ
+    diamond "Cache Hit?" as Cache
+}
+
+package "Network Layer" {
+    [API Client\n3s timeout] as API
+    [Health Check\n10s interval] as Health
+}
+
+package "Storage Layer" {
+    [Cache Manager] as CM
+    [Sync Queue] as SQ
+    database "IndexedDB\n5 stores" as IDB
+}
+
+package "Sync Layer" {
+    [Network Status] as NS
+    [Sync Manager] as SM
+    [Background Sync] as BG
+}
+
+Components --> Hooks
+Hooks --> RQ
+RQ --> Cache
+
+Cache --> API : Miss/Stale
+Cache --> CM : Hit
+
+API --> CM : Success
+API --> SQ : Network Error
+API --> Health
+
+CM --> IDB
+SQ --> IDB
+
+Health --> NS
+NS --> SM : Online Event
+SM --> SQ
+SM --> API
+SM --> CM
+SM --> BG
+
+@enduml

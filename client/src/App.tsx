@@ -12,6 +12,7 @@ import Onboarding from './pages/Onboarding';
 import Home from './pages/Home';
 import ListView from './pages/ListView';
 import OfflineToggle from './components/Common/OfflineToggle';
+import { ServiceWorkerUpdateNotification } from './components/Common/ServiceWorkerUpdateNotification';
 import type { User } from './types';
 import './App.css';
 
@@ -106,6 +107,8 @@ function App() {
         )}
         {/* Development-only offline testing toggle */}
         <OfflineToggle />
+        {/* Service worker update notification */}
+        <ServiceWorkerUpdateNotification />
       </ThemeProvider>
     </QueryClientProvider>
   );

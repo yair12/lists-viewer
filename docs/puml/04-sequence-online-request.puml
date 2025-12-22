@@ -1,0 +1,26 @@
+@startuml Online Request Flow
+
+title Pattern 1: Online Request (Happy Path)
+
+participant Component
+participant Hook
+participant "React Query" as RQ
+participant "API Client" as API
+participant Backend
+participant "Cache Manager" as Cache
+participant IndexedDB
+
+Component -> Hook: Request data
+Hook -> RQ: Query
+RQ -> API: Fetch
+API -> Backend: HTTP Request
+Backend --> API: Response
+API -> Cache: Store in cache
+Cache -> IndexedDB: putItem()
+IndexedDB --> Cache: ✓
+Cache --> API: ✓
+API --> RQ: Data
+RQ --> Hook: Data
+Hook --> Component: Render
+
+@enduml

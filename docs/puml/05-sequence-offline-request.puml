@@ -1,0 +1,31 @@
+@startuml Offline Request Flow
+
+title Pattern 2: Offline Request (Degraded Mode)
+
+participant Component
+participant Hook
+participant "React Query" as RQ
+participant "API Client" as API
+participant "Cache Manager" as Cache
+participant "Sync Queue" as Queue
+participant IndexedDB
+
+Component -> Hook: Request mutation
+Hook -> RQ: Mutate
+RQ -> API: Try API call
+API --x RQ: Timeout (3s)
+RQ -> Hook: Network Error
+
+Hook -> Hook: Generate Temp ID
+Hook -> Cache: Store temp record
+Cache -> IndexedDB: putItem(lists/items)
+IndexedDB --> Cache: ✓
+
+Hook -> Queue: Add to sync queue
+Queue -> IndexedDB: putItem(syncQueue)
+IndexedDB --> Queue: ✓
+
+Queue --> Hook: ✓
+Hook --> Component: Temp result\n(with pending indicator)
+
+@enduml

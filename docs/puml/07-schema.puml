@@ -1,0 +1,66 @@
+@startuml IndexedDB Schema
+
+title IndexedDB Store Schemas
+
+package "lists-viewer-db (v1)" {
+    object "lists" as lists_store {
+        keyPath: 'id'
+        --
+        Indexes:
+        - updatedAt
+        - createdBy
+        --
+        Data:
+        id, name, description
+        version, createdAt, updatedAt
+        itemCount, completedItemCount
+    }
+
+    object "items" as items_store {
+        keyPath: 'id'
+        --
+        Indexes:
+        - listId
+        - type
+        - completed
+        - order
+        - [listId, order] (compound)
+        --
+        Data:
+        id, listId, name, type
+        completed, order, version
+        quantity, quantityType
+    }
+
+    object "syncQueue" as sync_store {
+        keyPath: 'id'
+        --
+        Indexes:
+        - status
+        - timestamp
+        - [status, timestamp] (compound)
+        --
+        Data:
+        id, timestamp, operationType
+        resourceType, resourceId, parentId
+        payload, version, retryCount
+        status, error, lastAttempt
+    }
+
+    object "cache" as cache_store {
+        keyPath: 'key'
+        --
+        Data:
+        key, value, timestamp
+    }
+
+    object "user" as user_store {
+        keyPath: 'id'
+        --
+        Data:
+        id, username, iconId
+        preferences {theme, language}
+    }
+}
+
+@enduml

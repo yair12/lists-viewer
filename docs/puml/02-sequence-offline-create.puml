@@ -1,0 +1,65 @@
+@startuml Offline Create Operation - Sequence
+
+title Offline Create Operation Flow
+
+actor User
+participant Component
+participant "useCreateList\nHook" as Hook
+participant "ListsApi" as API
+participant "NetworkStatus" as Network
+participant "CacheManager" as Cache
+participant "SyncQueue" as Queue
+participant "IndexedDB" as IDB
+
+User -> Component: Create new list
+Component -> Hook: mutate(data)
+
+Hook -> API: create(data)
+note right: 3-second timeout
+API --x Hook: Network Error
+
+Hook -> Hook: isNetworkError(error)
+note right: Offline mode activated
+
+Hook -> Hook: Generate temp ID
+Hook -> Cache: cacheList(tempList)
+Cache -> IDB: putItem(LISTS, tempList)
+IDB --> Cache: ✓
+Cache --> Hook: ✓
+
+Hook -> Queue: addToSyncQueue(CREATE, LIST, id, data)
+Queue -> IDB: putItem(SYNC_QUEUE, queueItem)
+IDB --> Queue: ✓
+Queue --> Hook: ✓
+
+Hook --> Component: return tempList
+Component -> User: Show list (with pending indicator)
+
+...Network comes back online...
+
+Network -> Network: checkServerHealth()
+Network -> Network: isOnline = true
+Network -> SyncManager: trigger sync
+
+SyncManager -> Queue: getPendingSyncItems()
+Queue -> IDB: getItemsByIndex(status=PENDING)
+IDB --> Queue: [queueItem]
+Queue --> SyncManager: [queueItem]
+
+SyncManager -> Queue: updateStatus(id, SYNCING)
+SyncManager -> API: create(payload)
+API --> SyncManager: newList (with real ID)
+
+SyncManager -> Cache: cacheList(newList)
+Cache -> IDB: putItem(LISTS, newList)
+SyncManager -> Cache: removeCachedList(tempId)
+Cache -> IDB: deleteItem(LISTS, tempId)
+
+SyncManager -> Queue: removeSyncItem(id)
+Queue -> IDB: deleteItem(SYNC_QUEUE, id)
+
+SyncManager -> Hook: notify itemSynced
+Hook -> Component: invalidate queries
+Component -> User: Update UI with real list
+
+@enduml

@@ -51,16 +51,36 @@ export default defineConfig({
         skipWaiting: true,
         cleanupOutdatedCaches: true,
         // Background sync for offline operations
-        navigateFallback: 'index.html',
+        navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],
+        // Precache critical assets
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
+        // Don't cache API routes in service worker
+        navigateFallbackAllowlist: [/^(?!\/(api|health)).*/],
         runtimeCaching: [
           {
-            // API requests - NetworkFirst strategy
+            // HTML pages - NetworkFirst with fast fallback
+            urlPattern: /\.html$/,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60 * 24 // 24 hours
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // API requests - NetworkFirst strategy with timeout
             urlPattern: /^.*\/api\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 200,
                 maxAgeSeconds: 60 * 60 * 24 // 24 hours

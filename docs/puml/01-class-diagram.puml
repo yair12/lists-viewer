@@ -1,0 +1,269 @@
+@startuml Client-Side Cache Architecture - Class Diagram
+
+title Client-Side Cache Mechanism Architecture
+
+' Core Storage Layer
+package "Storage Layer" {
+    class IndexedDB {
+        - dbInstance: IDBDatabase
+        - DB_NAME: "lists-viewer-db"
+        - DB_VERSION: 1
+        + initDB(): Promise<IDBDatabase>
+        + getItem(storeName, key): Promise<T>
+        + getAllItems(storeName): Promise<T[]>
+        + getItemsByIndex(storeName, indexName, value): Promise<T[]>
+        + putItem(storeName, value): Promise<void>
+        + putItems(storeName, values): Promise<void>
+        + deleteItem(storeName, key): Promise<void>
+        + clearStore(storeName): Promise<void>
+    }
+
+    enum Stores {
+        LISTS = "lists"
+        ITEMS = "items"
+        SYNC_QUEUE = "syncQueue"
+        CACHE = "cache"
+        USER = "user"
+    }
+
+    class CacheManager {
+        + cacheList(list: List): Promise<void>
+        + cacheLists(lists: List[]): Promise<void>
+        + getCachedList(listId: string): Promise<List>
+        + getCachedLists(): Promise<List[]>
+        + removeCachedList(listId: string): Promise<void>
+        + cacheItem(item: Item): Promise<void>
+        + cacheItems(items: Item[]): Promise<void>
+        + getCachedItem(itemId: string): Promise<Item>
+        + getCachedItemsByList(listId: string): Promise<Item[]>
+        + removeCachedItem(itemId: string): Promise<void>
+        + cacheUserPreferences(key, value): Promise<void>
+        + getCachedUserPreference(key): Promise<T>
+    }
+
+    class SyncQueue {
+        + addToSyncQueue(operation, resource, id, payload, version): Promise<SyncQueueItem>
+        + getPendingSyncItems(): Promise<SyncQueueItem[]>
+        + getFailedSyncItems(): Promise<SyncQueueItem[]>
+        + updateSyncItemStatus(id, status, error): Promise<void>
+        + removeSyncItem(id): Promise<void>
+        + clearSyncedItems(): Promise<number>
+        + retryFailedItems(): Promise<number>
+        + getPendingSyncCount(): Promise<number>
+        + hasPendingSync(): Promise<boolean>
+        + getSyncQueueStats(): Promise<SyncQueueStats>
+    }
+
+    class SyncQueueItem {
+        + id: string
+        + timestamp: string
+        + operationType: OperationType
+        + resourceType: ResourceType
+        + resourceId: string
+        + parentId?: string
+        + payload: unknown
+        + version: number
+        + retryCount: number
+        + status: SyncStatus
+        + error?: string
+        + lastAttempt?: string
+    }
+}
+
+' Sync Layer
+package "Sync Layer" {
+    class SyncManager {
+        - isSyncing: boolean
+        - listeners: Set<SyncListener>
+        - itemSyncedListeners: Set<ItemSyncedListener>
+        - status: SyncStatus
+        + addListener(listener: SyncListener): Function
+        + addItemSyncedListener(listener): Function
+        + getStatus(): SyncStatus
+        + startSync(): Promise<void>
+        - syncItem(item: SyncQueueItem): Promise<void>
+        - executeOperation(item: SyncQueueItem): Promise<void>
+        - executeListOperation(type, id, payload): Promise<void>
+        - executeItemOperation(type, id, parentId, payload): Promise<void>
+        - notifyListeners(status, progress): void
+        - notifyItemSynced(itemId, resourceType): void
+    }
+
+    class NetworkStatusService {
+        - listeners: Set<NetworkStatusListener>
+        - _isOnline: boolean
+        - healthCheckTimer: Timer
+        - isChecking: boolean
+        + isOnline: boolean
+        + addListener(listener): Function
+        + removeListener(listener): void
+        - init(): void
+        - startHealthChecks(): void
+        - checkServerHealth(): Promise<void>
+        - handleOnline(): void
+        - handleOffline(): void
+    }
+}
+
+' Network Layer
+package "Network Layer" {
+    class ApiClient {
+        + baseURL: string
+        + timeout: 3000
+        + get(url, config): Promise<T>
+        + post(url, data, config): Promise<T>
+        + put(url, data, config): Promise<T>
+        + delete(url, config): Promise<T>
+        + isNetworkError(error): boolean
+    }
+
+    class ListsApi {
+        + getAll(): Promise<List[]>
+        + getById(id): Promise<List>
+        + create(data): Promise<List>
+        + update(id, data): Promise<List>
+        + delete(id, version): Promise<void>
+    }
+
+    class ItemsApi {
+        + getByListId(listId): Promise<Item[]>
+        + getById(listId, itemId): Promise<Item>
+        + create(listId, data): Promise<Item>
+        + update(listId, itemId, data): Promise<Item>
+        + delete(listId, itemId, version): Promise<void>
+        + bulkComplete(listId, itemIds): Promise<Item[]>
+        + reorder(listId, items): Promise<void>
+        + move(listId, itemId, data): Promise<Item>
+    }
+}
+
+' React Layer
+package "React Layer" {
+    class QueryClient <<TanStack Query>> {
+        + getQueryData(key): T
+        + setQueryData(key, data): void
+        + invalidateQueries(key): Promise<void>
+        + prefetchQuery(key, fn): Promise<void>
+    }
+
+    class useLists {
+        + queryKey: string[]
+        + queryFn(): Promise<List[]>
+        + placeholderData(): List[]
+        + staleTime: 30000
+        + retry: false
+        --
+        Fetches from API with 3s timeout
+        Falls back to IndexedDB cache
+        Caches results automatically
+    }
+
+    class useCreateList {
+        + mutationFn(data): Promise<List>
+        + onSuccess(): void
+        --
+        Creates via API if online
+        Creates temp record if offline
+        Adds to sync queue offline
+        Updates cache immediately
+    }
+
+    class useUpdateList {
+        + mutationFn(listId, data): Promise<List>
+        + onSuccess(): void
+        --
+        Updates via API if online
+        Updates cache + queue if offline
+        Optimistic locking with version
+    }
+
+    class useDeleteList {
+        + mutationFn(listId, version): Promise<void>
+        + onSuccess(): void
+        --
+        Deletes via API if online
+        Queues for sync if offline
+        Removes from cache
+    }
+
+    class useItems {
+        + queryKey: string[]
+        + queryFn(): Promise<Item[]>
+        + enabled: boolean
+        --
+        Similar pattern to useLists
+        Filtered by listId
+    }
+}
+
+' Relationships
+IndexedDB .left.> Stores : uses
+CacheManager --> IndexedDB : uses
+SyncQueue --> IndexedDB : uses
+SyncQueue ..> SyncQueueItem : manages
+
+SyncManager --> SyncQueue : reads/updates
+SyncManager --> NetworkStatusService : monitors
+SyncManager --> ListsApi : syncs via
+SyncManager --> ItemsApi : syncs via
+SyncManager --> CacheManager : updates after sync
+
+NetworkStatusService --> ApiClient : health checks
+
+useLists --> QueryClient : integrates
+useLists --> ListsApi : fetches from
+useLists --> CacheManager : reads/writes
+useLists ..> ApiClient : error detection
+
+useCreateList --> QueryClient : updates
+useCreateList --> ListsApi : creates via
+useCreateList --> CacheManager : caches
+useCreateList --> SyncQueue : queues when offline
+
+useUpdateList --> QueryClient : updates
+useUpdateList --> ListsApi : updates via
+useUpdateList --> CacheManager : caches
+useUpdateList --> SyncQueue : queues when offline
+
+useDeleteList --> QueryClient : updates
+useDeleteList --> ListsApi : deletes via
+useDeleteList --> CacheManager : removes from
+useDeleteList --> SyncQueue : queues when offline
+
+useItems --> QueryClient : integrates
+useItems --> ItemsApi : fetches from
+useItems --> CacheManager : reads/writes
+
+ListsApi --> ApiClient : uses
+ItemsApi --> ApiClient : uses
+
+QueryClient ..> CacheManager : fallback to
+
+' Notes
+note right of IndexedDB
+  5 Object Stores:
+  - lists (id, updatedAt, createdBy indexes)
+  - items (id, listId, type, completed, order indexes)
+  - syncQueue (id, status, timestamp indexes)
+  - cache (key-value pairs)
+  - user (user preferences)
+end note
+
+note right of SyncManager
+  Background Sync:
+  - Triggered on network online event
+  - Processes queue in FIFO order
+  - Exponential backoff on failures
+  - Max 5 retry attempts
+  - Notifies listeners of progress
+end note
+
+note right of NetworkStatusService
+  Health Monitoring:
+  - Browser online/offline events
+  - Server health checks every 10s
+  - 3-second timeout per check
+  - Self-healing mechanism
+end note
+
+@enduml
