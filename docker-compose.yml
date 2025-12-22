@@ -21,11 +21,11 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  app:
     build:
-      context: ./server
+      context: .
       dockerfile: Dockerfile
-    container_name: lists-viewer-backend
+    container_name: lists-viewer-app
     environment:
       SERVER_PORT: 8080
       MONGODB_URI: mongodb://root:rootpassword@mongodb:27017/lists_viewer?authSource=admin
@@ -37,30 +37,11 @@ services:
         condition: service_healthy
     networks:
       - lists-viewer-network
-    command: /root/server
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
-
-  frontend:
-    build:
-      context: ./client
-      dockerfile: Dockerfile.dev
-    container_name: lists-viewer-frontend
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-    networks:
-      - lists-viewer-network
-    volumes:
-      - ./client:/app
-      - /app/node_modules
-    environment:
-      VITE_API_BASE_URL: http://localhost:8080/api/v1
-    command: npm run dev
 
 volumes:
   mongodb_data:

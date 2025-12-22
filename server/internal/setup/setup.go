@@ -2,6 +2,8 @@ package setup
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -73,6 +75,25 @@ func SetupRouter(dbClient *mongo.Client) http.Handler {
 	itemsRouter.HandleFunc("", itemHandler.GetItemsByList).Methods("GET")
 	itemsRouter.HandleFunc("", itemHandler.CreateItem).Methods("POST")
 	itemsRouter.HandleFunc("", itemHandler.BulkDeleteItems).Methods("DELETE")
+
+	// Serve static files from public directory
+	publicDir := "./public"
+	if _, err := os.Stat(publicDir); err == nil {
+		// Serve static assets
+		router.PathPrefix("/assets/").Handler(http.StripPrefix("/assets/", http.FileServer(http.Dir(filepath.Join(publicDir, "assets")))))
+
+		// Serve index.html for all other routes (SPA)
+		router.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if file exists
+			path := filepath.Join(publicDir, r.URL.Path)
+			if _, err := os.Stat(path); err == nil {
+				http.ServeFile(w, r, path)
+				return
+			}
+			// Serve index.html for SPA routing
+			http.ServeFile(w, r, filepath.Join(publicDir, "index.html"))
+		})
+	}
 
 	// Apply CORS middleware to all routes
 	return api.CorsMiddleware(router)

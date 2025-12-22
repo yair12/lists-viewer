@@ -41,13 +41,8 @@ func (h *UserHandler) InitUser(w http.ResponseWriter, r *http.Request) {
 
 // GetIcons retrieves all available icons
 // GET /api/v1/icons
+// Note: This endpoint doesn't require authentication as it's used during onboarding
 func (h *UserHandler) GetIcons(w http.ResponseWriter, r *http.Request) {
-	_, ok := api.ValidateUserID(r)
-	if !ok {
-		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
-		return
-	}
-
 	icons := h.service.GetAvailableIcons()
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

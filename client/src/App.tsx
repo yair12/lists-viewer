@@ -1,44 +1,64 @@
-import { CssBaseline, ThemeProvider, createTheme } from '@mui/material'
-import { useState } from 'react'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { darkTheme } from './styles/theme';
+import { USER_STORAGE_KEY } from './utils/constants';
+import Onboarding from './pages/Onboarding';
+import Home from './pages/Home';
+import type { User } from './types';
+import './App.css';
 
-const darkTheme = createTheme({
-  palette: {
-    mode: 'dark',
-    primary: {
-      main: '#90caf9',
-    },
-    secondary: {
-      main: '#f48fb1',
-    },
-    background: {
-      default: '#121212',
-      paper: '#1e1e1e',
+// Create React Query client
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 30000, // 30 seconds
     },
   },
-  typography: {
-    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-  },
-})
+});
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if user exists in localStorage
+    const userStr = localStorage.getItem(USER_STORAGE_KEY);
+    if (userStr) {
+      try {
+        const userData = JSON.parse(userStr);
+        setUser(userData);
+      } catch (error) {
+        console.error('Failed to parse user data:', error);
+        localStorage.removeItem(USER_STORAGE_KEY);
+      }
+    }
+    setLoading(false);
+  }, []);
+
+  const handleOnboardingComplete = (userData: User) => {
+    setUser(userData);
+  };
+
+  if (loading) {
+    return null; // Or a loading spinner
+  }
 
   return (
-    <ThemeProvider theme={darkTheme}>
-      <CssBaseline />
-      <div className="app">
-        <h1>Lists Viewer</h1>
-        <p>A Progressive Web App for managing your lists</p>
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          This is a placeholder. The application is under development.
-        </p>
-      </div>
-    </ThemeProvider>
-  )
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider theme={darkTheme}>
+        <CssBaseline />
+        {!user ? (
+          <Onboarding onComplete={handleOnboardingComplete} />
+        ) : (
+          <Home />
+        )}
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
 }
 
-export default App
+export default App;

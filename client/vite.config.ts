@@ -72,14 +72,20 @@ export default defineConfig({
     },
   },
   server: {
+    host: '0.0.0.0', // Listen on all interfaces for Docker
+    port: 5173,
+    strictPort: true,
+    watch: {
+      usePolling: true, // Needed for Docker on some systems
+    },
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_API_URL || 'http://backend:8080',
         changeOrigin: true,
         secure: false,
       },
       '/health': {
-        target: 'http://localhost:8080',
+        target: process.env.VITE_API_URL || 'http://backend:8080',
         changeOrigin: true,
         secure: false,
       }
