@@ -1,9 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/yair12/lists-viewer/server/internal/api"
 	"github.com/yair12/lists-viewer/server/internal/models"
 	"github.com/yair12/lists-viewer/server/internal/service"
@@ -21,30 +21,35 @@ func NewUserHandler(svc *service.UserService) *UserHandler {
 
 // InitUser initializes or retrieves a user
 // POST /api/v1/users/init
-func (h *UserHandler) InitUser(c *gin.Context) {
+func (h *UserHandler) InitUser(w http.ResponseWriter, r *http.Request) {
 	var req models.InitUserRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	user, err := h.service.InitUser(c.Request.Context(), &req)
+	user, err := h.service.InitUser(r.Context(), &req)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(user)
 }
 
 // GetIcons retrieves all available icons
 // GET /api/v1/icons
-func (h *UserHandler) GetIcons(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *UserHandler) GetIcons(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
 	icons := h.service.GetAvailableIcons()
-	c.JSON(http.StatusOK, models.IconsResponse{Data: icons})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.IconsResponse{Data: icons})
 }

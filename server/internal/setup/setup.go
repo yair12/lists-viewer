@@ -1,7 +1,9 @@
 package setup
 
 import (
-	"github.com/gin-gonic/gin"
+	"net/http"
+
+	"github.com/gorilla/mux"
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/yair12/lists-viewer/server/internal/api"
@@ -10,12 +12,9 @@ import (
 	"github.com/yair12/lists-viewer/server/internal/service"
 )
 
-// SetupRouter initializes and configures the Gin router with all handlers
-func SetupRouter(dbClient *mongo.Client) *gin.Engine {
-	router := gin.Default()
-
-	// CORS middleware
-	router.Use(api.CorsMiddleware())
+// SetupRouter initializes and configures the Gorilla Mux router with all handlers
+func SetupRouter(dbClient *mongo.Client) http.Handler {
+	router := mux.NewRouter()
 
 	// Get database
 	db := dbClient.Database("lists_viewer")
@@ -35,46 +34,46 @@ func SetupRouter(dbClient *mongo.Client) *gin.Engine {
 	itemHandler := handler.NewItemHandler(itemService)
 	userHandler := handler.NewUserHandler(userService)
 
-	// Health check endpoints
-	router.GET("/health/live", healthHandler.LivenessProbe)
-	router.GET("/health/ready", healthHandler.ReadinessProbe)
+	// Health check endpoints (root level)
+	router.HandleFunc("/health/live", healthHandler.LivenessProbe).Methods("GET")
+	router.HandleFunc("/health/ready", healthHandler.ReadinessProbe).Methods("GET")
 
 	// API v1 routes
-	v1 := router.Group("/api/v1")
-	{
-		// Health endpoints
-		v1.GET("/health", healthHandler.LivenessProbe)
+	api1 := router.PathPrefix("/api/v1").Subrouter()
 
-		// User/Icon endpoints
-		v1.POST("/users/init", userHandler.InitUser)
-		v1.GET("/icons", userHandler.GetIcons)
+	// Health endpoints
+	api1.HandleFunc("/health", healthHandler.LivenessProbe).Methods("GET")
 
-		// List endpoints
-		v1.GET("/lists", listHandler.GetAllLists)
-		v1.POST("/lists", listHandler.CreateList)
-		v1.GET("/lists/:id", listHandler.GetList)
-		v1.PUT("/lists/:id", listHandler.UpdateList)
-		v1.DELETE("/lists/:id", listHandler.DeleteList)
+	// User/Icon endpoints
+	api1.HandleFunc("/users/init", userHandler.InitUser).Methods("POST")
+	api1.HandleFunc("/icons", userHandler.GetIcons).Methods("GET")
 
-		// Item endpoints
-		v1.GET("/lists/:listId/items", itemHandler.GetItemsByList)
-		v1.POST("/lists/:listId/items", itemHandler.CreateItem)
-		v1.GET("/lists/:listId/items/:itemId", itemHandler.GetItem)
-		v1.PUT("/lists/:listId/items/:itemId", itemHandler.UpdateItem)
-		v1.DELETE("/lists/:listId/items/:itemId", itemHandler.DeleteItem)
+	// List CRUD endpoints
+	api1.HandleFunc("/lists", listHandler.GetAllLists).Methods("GET")
+	api1.HandleFunc("/lists", listHandler.CreateList).Methods("POST")
+	api1.HandleFunc("/lists/{id}", listHandler.GetList).Methods("GET")
+	api1.HandleFunc("/lists/{id}", listHandler.UpdateList).Methods("PUT")
+	api1.HandleFunc("/lists/{id}", listHandler.DeleteList).Methods("DELETE")
 
-		// Item reorder and bulk operations
-		v1.PATCH("/lists/:listId/items/reorder", itemHandler.ReorderItems)
-		v1.PATCH("/lists/:listId/items/complete", itemHandler.BulkCompleteItems)
-		v1.DELETE("/lists/:listId/items", itemHandler.BulkDeleteItems)
-		v1.DELETE("/lists/:listId/items/completed", itemHandler.DeleteCompletedItems)
+	// Item endpoints - register static paths before dynamic {itemId} paths
+	itemsRouter := api1.PathPrefix("/lists/{listId}/items").Subrouter()
 
-		// Item move endpoint
-		v1.PATCH("/lists/:sourceListId/items/:itemId/move", itemHandler.MoveItem)
-	}
+	// Item bulk operations (static paths - must come first!)
+	itemsRouter.HandleFunc("/reorder", itemHandler.ReorderItems).Methods("PATCH")
+	itemsRouter.HandleFunc("/complete", itemHandler.BulkCompleteItems).Methods("PATCH")
+	itemsRouter.HandleFunc("/completed", itemHandler.DeleteCompletedItems).Methods("DELETE")
 
-	// Serve static files (to be implemented in later phases)
-	// router.Static("/", "./public")
+	// Specific item operations (dynamic paths - come after static paths)
+	itemsRouter.HandleFunc("/{itemId}", itemHandler.GetItem).Methods("GET")
+	itemsRouter.HandleFunc("/{itemId}", itemHandler.UpdateItem).Methods("PUT")
+	itemsRouter.HandleFunc("/{itemId}", itemHandler.DeleteItem).Methods("DELETE")
+	itemsRouter.HandleFunc("/{itemId}/move", itemHandler.MoveItem).Methods("PATCH")
 
-	return router
+	// General item collection endpoints (no path suffix)
+	itemsRouter.HandleFunc("", itemHandler.GetItemsByList).Methods("GET")
+	itemsRouter.HandleFunc("", itemHandler.CreateItem).Methods("POST")
+	itemsRouter.HandleFunc("", itemHandler.BulkDeleteItems).Methods("DELETE")
+
+	// Apply CORS middleware to all routes
+	return api.CorsMiddleware(router)
 }

@@ -2,10 +2,10 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/yair12/lists-viewer/server/internal/service"
 )
 
@@ -25,27 +25,33 @@ type HealthResponse struct {
 }
 
 // LivenessProbe returns 200 if the server is alive
-func (h *HealthHandler) LivenessProbe(c *gin.Context) {
-	c.JSON(http.StatusOK, HealthResponse{
+func (h *HealthHandler) LivenessProbe(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(HealthResponse{
 		Status: "alive",
 	})
 }
 
 // ReadinessProbe returns 200 if the server is ready to serve requests
-func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
+func (h *HealthHandler) ReadinessProbe(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err := h.service.CheckDatabaseHealth(ctx)
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, HealthResponse{
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(HealthResponse{
 			Status:   "not_ready",
 			Database: "disconnected",
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, HealthResponse{
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(HealthResponse{
 		Status:   "ready",
 		Database: "connected",
 	})

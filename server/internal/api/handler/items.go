@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"encoding/json"
+	"log"
 	"net/http"
 
-	"github.com/gin-gonic/gin"
+	"github.com/gorilla/mux"
 	"github.com/yair12/lists-viewer/server/internal/api"
 	"github.com/yair12/lists-viewer/server/internal/models"
 	"github.com/yair12/lists-viewer/server/internal/service"
@@ -21,212 +23,234 @@ func NewItemHandler(svc *service.ItemService) *ItemHandler {
 
 // GetItemsByList retrieves all items in a list
 // GET /api/v1/lists/:listId/items
-func (h *ItemHandler) GetItemsByList(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *ItemHandler) GetItemsByList(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
-	includeArchived := false
-	if archived := c.Query("includeArchived"); archived == "true" {
-		includeArchived = true
-	}
+	includeArchived := r.URL.Query().Get("includeArchived") == "true"
 
-	items, err := h.service.GetItemsByList(c.Request.Context(), listID, includeArchived)
+	items, err := h.service.GetItemsByList(r.Context(), listID, includeArchived)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ItemsResponse{Data: items})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.ItemsResponse{Data: items})
 }
 
 // CreateItem creates a new item
 // POST /api/v1/lists/:listId/items
-func (h *ItemHandler) CreateItem(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
 	var req models.CreateItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	item, err := h.service.CreateItem(c.Request.Context(), listID, &req, userID)
+	item, err := h.service.CreateItem(r.Context(), listID, &req, userID)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusCreated, item)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(item)
 }
 
 // GetItem retrieves a specific item
 // GET /api/v1/lists/:listId/items/:itemId
-func (h *ItemHandler) GetItem(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *ItemHandler) GetItem(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
-	itemID := c.Param("itemId")
+	vars := mux.Vars(r)
+	listID := vars["listId"]
+	itemID := vars["itemId"]
 
 	if listID == "" || itemID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
 		return
 	}
 
-	item, err := h.service.GetItem(c.Request.Context(), listID, itemID)
+	item, err := h.service.GetItem(r.Context(), listID, itemID)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, item)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(item)
 }
 
 // UpdateItem updates an item
 // PUT /api/v1/lists/:listId/items/:itemId
-func (h *ItemHandler) UpdateItem(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
-	itemID := c.Param("itemId")
+	vars := mux.Vars(r)
+	listID := vars["listId"]
+	itemID := vars["itemId"]
 
 	if listID == "" || itemID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
 		return
 	}
 
 	var req models.UpdateItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	item, err := h.service.UpdateItem(c.Request.Context(), listID, itemID, &req, userID)
+	item, err := h.service.UpdateItem(r.Context(), listID, itemID, &req, userID)
 	if err != nil {
 		if err.Error() == "version_conflict" {
-			api.ErrorResponse(c, http.StatusConflict, "version_conflict", "Item was modified by another user", nil)
+			api.ErrorResponse(w, http.StatusConflict, "version_conflict", "Item was modified by another user", nil)
 		} else {
-			api.ErrorHandler(c, err)
+			api.ErrorHandler(w, err)
 		}
 		return
 	}
 
-	c.JSON(http.StatusOK, item)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(item)
 }
 
 // DeleteItem deletes an item
 // DELETE /api/v1/lists/:listId/items/:itemId
-func (h *ItemHandler) DeleteItem(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
-	itemID := c.Param("itemId")
+	vars := mux.Vars(r)
+	listID := vars["listId"]
+	itemID := vars["itemId"]
 
 	if listID == "" || itemID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
 		return
 	}
 
 	var req models.DeleteItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	err := h.service.DeleteItem(c.Request.Context(), listID, itemID, userID, req.Version)
+	err := h.service.DeleteItem(r.Context(), listID, itemID, userID, req.Version)
 	if err != nil {
 		if err.Error() == "version_conflict" {
-			api.ErrorResponse(c, http.StatusConflict, "version_conflict", "Item was modified by another user", nil)
+			api.ErrorResponse(w, http.StatusConflict, "version_conflict", "Item was modified by another user", nil)
 		} else {
-			api.ErrorHandler(c, err)
+			api.ErrorHandler(w, err)
 		}
 		return
 	}
 
-	c.JSON(http.StatusNoContent, nil)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ReorderItems reorders items in a list
 // PATCH /api/v1/lists/:listId/items/reorder
-func (h *ItemHandler) ReorderItems(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *ItemHandler) ReorderItems(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
 	var req models.ReorderItemsRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	items, err := h.service.ReorderItems(c.Request.Context(), listID, req.Items)
+	items, err := h.service.ReorderItems(r.Context(), listID, req.Items)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, models.ReorderResponse{Data: items})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.ReorderResponse{Data: items})
 }
 
 // BulkCompleteItems completes multiple items
 // PATCH /api/v1/lists/:listId/items/complete
-func (h *ItemHandler) BulkCompleteItems(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+func (h *ItemHandler) BulkCompleteItems(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
 	var req models.BulkCompleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	items, err := h.service.BulkCompleteItems(c.Request.Context(), listID, req.ItemIDs, userID)
+	log.Printf("BulkCompleteItems: listID=%s, itemIDs=%v, userID=%s", listID, req.ItemIDs, userID)
+	items, err := h.service.BulkCompleteItems(r.Context(), listID, req.ItemIDs, userID)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		log.Printf("BulkCompleteItems ERROR: %v", err)
+		api.ErrorHandler(w, err)
 		return
 	}
+	log.Printf("BulkCompleteItems SUCCESS: completed %d items", len(items))
 
-	c.JSON(http.StatusOK, models.BulkCompleteResponse{
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.BulkCompleteResponse{
 		CompletedCount: int(len(items)),
 		Data:           items,
 	})
@@ -234,83 +258,93 @@ func (h *ItemHandler) BulkCompleteItems(c *gin.Context) {
 
 // BulkDeleteItems deletes multiple items
 // DELETE /api/v1/lists/:listId/items
-func (h *ItemHandler) BulkDeleteItems(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *ItemHandler) BulkDeleteItems(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
 	var req models.BulkDeleteRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	count, err := h.service.BulkDeleteItems(c.Request.Context(), listID, req.ItemIDs)
+	count, err := h.service.BulkDeleteItems(r.Context(), listID, req.ItemIDs)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, models.BulkDeleteResponse{DeletedCount: int(count)})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.BulkDeleteResponse{DeletedCount: int(count)})
 }
 
 // DeleteCompletedItems deletes all completed items in a list
 // DELETE /api/v1/lists/:listId/items/completed
-func (h *ItemHandler) DeleteCompletedItems(c *gin.Context) {
-	_, ok := api.ValidateUserID(c)
+func (h *ItemHandler) DeleteCompletedItems(w http.ResponseWriter, r *http.Request) {
+	_, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	listID := c.Param("listId")
+	listID := mux.Vars(r)["listId"]
 	if listID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "List ID is required", nil)
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID is required", nil)
 		return
 	}
 
-	count, err := h.service.DeleteCompletedItems(c.Request.Context(), listID)
+	count, err := h.service.DeleteCompletedItems(r.Context(), listID)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, models.BulkDeleteResponse{DeletedCount: int(count)})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(models.BulkDeleteResponse{DeletedCount: int(count)})
 }
 
 // MoveItem moves an item to a different list
-// PATCH /api/v1/lists/:sourceListId/items/:itemId/move
-func (h *ItemHandler) MoveItem(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+// PATCH /api/v1/lists/:listId/items/:itemId/move
+func (h *ItemHandler) MoveItem(w http.ResponseWriter, r *http.Request) {
+	userID, ok := api.ValidateUserID(r)
 	if !ok {
+		api.ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing X-User-Id header", nil)
 		return
 	}
 
-	sourceListID := c.Param("sourceListId")
-	itemID := c.Param("itemId")
+	vars := mux.Vars(r)
+	listID := vars["listId"]
+	itemID := vars["itemId"]
 
-	if sourceListID == "" || itemID == "" {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", "Source List ID and Item ID are required", nil)
+	if listID == "" || itemID == "" {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", "List ID and Item ID are required", nil)
 		return
 	}
 
 	var req models.MoveItemRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		api.ErrorResponse(c, http.StatusBadRequest, "validation_error", err.Error(), nil)
+	if err := api.ParseJSONRequest(r, &req); err != nil {
+		api.ErrorResponse(w, http.StatusBadRequest, "validation_error", err.Error(), nil)
 		return
 	}
 
-	item, err := h.service.MoveItem(c.Request.Context(), sourceListID, itemID, req.TargetListID, req.Order, userID)
+	item, err := h.service.MoveItem(r.Context(), listID, itemID, req.TargetListID, req.Order, userID)
 	if err != nil {
-		api.ErrorHandler(c, err)
+		api.ErrorHandler(w, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, item)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(item)
 }

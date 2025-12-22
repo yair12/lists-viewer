@@ -90,17 +90,17 @@ func (r *ItemRepositoryImpl) Update(ctx context.Context, item *models.Item) erro
 		},
 		bson.M{
 			"$set": bson.M{
-				"name":           item.Name,
-				"completed":      item.Completed,
-				"quantity":       item.Quantity,
-				"quantityType":   item.QuantityType,
-				"order":          item.Order,
-				"userIconId":     item.UserIconID,
-				"updatedAt":      item.UpdatedAt,
-				"updatedBy":      item.UpdatedBy,
-				"version":        item.Version + 1,
-				"description":    item.Description,
-				"itemCount":      item.ItemCount,
+				"name":               item.Name,
+				"completed":          item.Completed,
+				"quantity":           item.Quantity,
+				"quantityType":       item.QuantityType,
+				"order":              item.Order,
+				"userIconId":         item.UserIconID,
+				"updatedAt":          item.UpdatedAt,
+				"updatedBy":          item.UpdatedBy,
+				"version":            item.Version + 1,
+				"description":        item.Description,
+				"itemCount":          item.ItemCount,
 				"completedItemCount": item.CompletedItemCount,
 			},
 		},
@@ -188,9 +188,9 @@ func (r *ItemRepositoryImpl) BulkComplete(ctx context.Context, listID string, it
 				"completed": true,
 				"updatedAt": now,
 				"updatedBy": updatedBy,
-				"$inc": bson.M{
-					"version": 1,
-				},
+			},
+			"$inc": bson.M{
+				"version": 1,
 			},
 		},
 	)
@@ -254,8 +254,8 @@ func (r *ItemRepositoryImpl) Move(ctx context.Context, sourceListID string, targ
 		},
 		bson.M{
 			"$set": bson.M{
-				"listId":   targetListID,
-				"order":    newOrder,
+				"listId":    targetListID,
+				"order":     newOrder,
 				"updatedAt": time.Now(),
 			},
 		},
@@ -316,8 +316,8 @@ func (r *ItemRepositoryImpl) UpdateItemCounts(ctx context.Context, listID string
 	_, err = r.collection.UpdateOne(
 		ctx,
 		bson.M{
-			"uuid":   listID,
-			"type":   "list",
+			"uuid": listID,
+			"type": "list",
 		},
 		bson.M{
 			"$set": bson.M{

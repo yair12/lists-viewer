@@ -37,9 +37,7 @@ services:
         condition: service_healthy
     networks:
       - lists-viewer-network
-    volumes:
-      - ./server:/app
-    command: go run ./cmd/server
+    command: /root/server
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
       interval: 10s
