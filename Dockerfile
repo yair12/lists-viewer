@@ -4,10 +4,17 @@ FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/client
 
+# Copy package files first for better caching
 COPY client/package*.json ./
-RUN npm install
 
+# Install dependencies with npm ci (faster and more reliable for CI/CD)
+# Also use --prefer-offline to use cache when possible
+RUN npm ci --prefer-offline --no-audit --progress=false
+
+# Copy source files
 COPY client/ ./
+
+# Build with optimizations
 RUN npm run build
 
 # Stage 2: Build backend
@@ -15,11 +22,13 @@ FROM golang:1.24-alpine AS backend-builder
 
 WORKDIR /app
 
+# Copy go mod files first for better caching
 COPY server/go.mod server/go.sum ./
 RUN go mod download
 
+# Copy source and build
 COPY server/ ./
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o server ./cmd/server
 
 # Stage 3: Runtime
 FROM alpine:latest

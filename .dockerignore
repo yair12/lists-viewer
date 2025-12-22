@@ -1,0 +1,38 @@
+# Client
+client/node_modules
+client/dist
+client/.vite
+client/coverage
+client/*.log
+
+# Server
+server/server
+server/*.log
+
+# General
+.git
+.gitignore
+*.md
+.env
+.env.local
+.vscode
+.idea
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+
+# Build artifacts
+k8s-images
+*.tar
+
+# Documentation
+docs/
+helm/
+specifications/
+
+# Tests
+**/*.test.ts
+**/*.test.tsx
+**/*.test.go
+**/tests/
