@@ -10,36 +10,41 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      devOptions: {
+        enabled: true, // Enable PWA in development
+        type: 'module',
+      },
       manifest: {
         name: 'Lists Viewer',
         short_name: 'Lists',
         description: 'A progressive web app for managing todo lists and checklists',
-        theme_color: '#ffffff',
+        theme_color: '#1976d2',
         background_color: '#ffffff',
         display: 'standalone',
         scope: '/',
         start_url: '/',
+        orientation: 'any',
         icons: [
           {
-            src: 'pwa-192x192.png',
+            src: '/pwa-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-512x512.png',
+            src: '/pwa-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'any'
           },
           {
-            src: 'pwa-maskable-192x192.png',
+            src: '/pwa-maskable-192x192.png',
             sizes: '192x192',
             type: 'image/png',
             purpose: 'maskable'
           },
           {
-            src: 'pwa-maskable-512x512.png',
+            src: '/pwa-maskable-512x512.png',
             sizes: '512x512',
             type: 'image/png',
             purpose: 'maskable'

@@ -2,7 +2,11 @@ import { AppBar, Toolbar, Typography, IconButton, Avatar, Box } from '@mui/mater
 import { Menu as MenuIcon } from '@mui/icons-material';
 import { STORAGE_KEYS } from '../../utils/constants';
 
-export default function Header() {
+interface HeaderProps {
+  onMenuClick?: () => void;
+}
+
+export default function Header({ onMenuClick }: HeaderProps) {
   const userStr = localStorage.getItem(STORAGE_KEYS.USER);
   const user = userStr ? JSON.parse(userStr) : null;
 
@@ -13,7 +17,8 @@ export default function Header() {
           edge="start"
           color="inherit"
           aria-label="menu"
-          sx={{ mr: 2, display: { sm: 'none' } }}
+          onClick={onMenuClick}
+          sx={{ mr: 2, display: { md: 'none' } }}
         >
           <MenuIcon />
         </IconButton>
