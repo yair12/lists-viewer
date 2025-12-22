@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yair12/lists-viewer/server/internal/api"
@@ -23,7 +22,7 @@ func NewItemHandler(svc *service.ItemService) *ItemHandler {
 // GetItemsByList retrieves all items in a list
 // GET /api/v1/lists/:listId/items
 func (h *ItemHandler) GetItemsByList(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}
@@ -80,7 +79,7 @@ func (h *ItemHandler) CreateItem(c *gin.Context) {
 // GetItem retrieves a specific item
 // GET /api/v1/lists/:listId/items/:itemId
 func (h *ItemHandler) GetItem(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}
@@ -175,7 +174,7 @@ func (h *ItemHandler) DeleteItem(c *gin.Context) {
 // ReorderItems reorders items in a list
 // PATCH /api/v1/lists/:listId/items/reorder
 func (h *ItemHandler) ReorderItems(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}
@@ -236,7 +235,7 @@ func (h *ItemHandler) BulkCompleteItems(c *gin.Context) {
 // BulkDeleteItems deletes multiple items
 // DELETE /api/v1/lists/:listId/items
 func (h *ItemHandler) BulkDeleteItems(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}
@@ -265,7 +264,7 @@ func (h *ItemHandler) BulkDeleteItems(c *gin.Context) {
 // DeleteCompletedItems deletes all completed items in a list
 // DELETE /api/v1/lists/:listId/items/completed
 func (h *ItemHandler) DeleteCompletedItems(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}

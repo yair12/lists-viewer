@@ -40,7 +40,7 @@ func (h *UserHandler) InitUser(c *gin.Context) {
 // GetIcons retrieves all available icons
 // GET /api/v1/icons
 func (h *UserHandler) GetIcons(c *gin.Context) {
-	userID, ok := api.ValidateUserID(c)
+	_, ok := api.ValidateUserID(c)
 	if !ok {
 		return
 	}

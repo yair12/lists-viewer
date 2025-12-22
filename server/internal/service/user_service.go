@@ -36,7 +36,7 @@ func (s *UserService) InitUser(ctx context.Context, req *models.InitUserRequest)
 	user := &models.User{
 		UUID:     uuid.New().String(),
 		Username: req.Username,
-		IconID:   req.IconId,
+		IconID:   req.IconID,
 		Color:    s.generateColor(),
 		Preferences: models.UserPreferences{
 			Theme:    "dark",

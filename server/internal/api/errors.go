@@ -23,8 +23,6 @@ func ErrorHandler(c *gin.Context, err error) {
 		return
 	}
 
-	errMsg := err.Error()
-
 	switch {
 	case errors.Is(err, errors.New("version_conflict")):
 		ErrorResponse(c, http.StatusConflict, "version_conflict", "Resource was modified by another user", nil)
