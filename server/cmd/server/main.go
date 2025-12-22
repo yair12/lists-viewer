@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/yair12/lists-viewer/server/internal/api"
 	"github.com/yair12/lists-viewer/server/internal/config"
 	"github.com/yair12/lists-viewer/server/internal/database"
+	"github.com/yair12/lists-viewer/server/internal/setup"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	defer dbClient.Disconnect(context.Background())
 
 	// Initialize router
-	router := api.SetupRouter(dbClient)
+	router := setup.SetupRouter(dbClient)
 
 	// Create HTTP server
 	server := &http.Server{

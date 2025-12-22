@@ -6,16 +6,16 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/mongo"
+	"github.com/yair12/lists-viewer/server/internal/service"
 )
 
 type HealthHandler struct {
-	dbClient *mongo.Client
+	service *service.HealthService
 }
 
-func NewHealthHandler(dbClient *mongo.Client) *HealthHandler {
+func NewHealthHandler(svc *service.HealthService) *HealthHandler {
 	return &HealthHandler{
-		dbClient: dbClient,
+		service: svc,
 	}
 }
 
@@ -36,7 +36,7 @@ func (h *HealthHandler) ReadinessProbe(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := h.dbClient.Ping(ctx, nil)
+	err := h.service.CheckDatabaseHealth(ctx)
 	if err != nil {
 		c.JSON(http.StatusServiceUnavailable, HealthResponse{
 			Status:   "not_ready",
