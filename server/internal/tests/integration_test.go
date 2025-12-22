@@ -574,6 +574,194 @@ func TestItemReorder(t *testing.T) {
 		rec := makeRequest(t, handler, "PATCH", path, req, userID)
 		if rec.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
+			return
+		}
+
+		// Verify the reorder worked by fetching items
+		getPath := fmt.Sprintf("/api/v1/lists/%s/items", listID)
+		getRec := makeRequest(t, handler, "GET", getPath, nil, userID)
+		if getRec.Code != http.StatusOK {
+			t.Fatalf("Failed to get items: %d", getRec.Code)
+		}
+
+		var itemsResp models.ItemsResponse
+		if err := json.NewDecoder(getRec.Body).Decode(&itemsResp); err != nil {
+			t.Fatalf("Failed to decode items: %v", err)
+		}
+
+		items := itemsResp.Data
+		if len(items) != 2 {
+			t.Fatalf("Expected 2 items, got %d", len(items))
+		}
+
+		// Check that item order matches the reorder request
+		if items[0].ID != itemIDs[1] {
+			t.Errorf("Expected first item to be %s, got %s", itemIDs[1], items[0].ID)
+		}
+		if items[1].ID != itemIDs[0] {
+			t.Errorf("Expected second item to be %s, got %s", itemIDs[0], items[1].ID)
+		}
+		if items[0].Order != 0 {
+			t.Errorf("Expected first item order to be 0, got %d", items[0].Order)
+		}
+		if items[1].Order != 1 {
+			t.Errorf("Expected second item order to be 1, got %d", items[1].Order)
+		}
+	})
+}
+
+func TestItemMove(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-move"
+
+	// Create source and target lists
+	sourceListReq := models.CreateListRequest{Name: "Source List"}
+	rec := makeRequest(t, handler, "POST", "/api/v1/lists", sourceListReq, userID)
+	var sourceList models.ListResponse
+	json.NewDecoder(rec.Body).Decode(&sourceList)
+	sourceListID := sourceList.ID
+
+	targetListReq := models.CreateListRequest{Name: "Target List"}
+	rec = makeRequest(t, handler, "POST", "/api/v1/lists", targetListReq, userID)
+	var targetList models.ListResponse
+	json.NewDecoder(rec.Body).Decode(&targetList)
+	targetListID := targetList.ID
+
+	// Create item in source list
+	itemReq := models.CreateItemRequest{Name: "Item to move", Type: "item"}
+	path := fmt.Sprintf("/api/v1/lists/%s/items", sourceListID)
+	rec = makeRequest(t, handler, "POST", path, itemReq, userID)
+	var item models.ItemResponse
+	json.NewDecoder(rec.Body).Decode(&item)
+	itemID := item.ID
+
+	t.Run("Move item between lists", func(t *testing.T) {
+		req := models.MoveItemRequest{
+			TargetListID: targetListID,
+			Order:        0,
+			Version:      1,
+		}
+
+		path := fmt.Sprintf("/api/v1/lists/%s/items/%s/move", sourceListID, itemID)
+		rec := makeRequest(t, handler, "PATCH", path, req, userID)
+		if rec.Code != http.StatusOK {
+			t.Errorf("Expected status 200, got %d: %s", rec.Code, rec.Body.String())
+			return
+		}
+
+		var movedItem models.ItemResponse
+		if err := json.NewDecoder(rec.Body).Decode(&movedItem); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if movedItem.ListID != targetListID {
+			t.Errorf("Expected item listId to be %s, got %s", targetListID, movedItem.ListID)
+		}
+
+		// Verify item is in target list
+		getPath := fmt.Sprintf("/api/v1/lists/%s/items", targetListID)
+		getRec := makeRequest(t, handler, "GET", getPath, nil, userID)
+		var targetItemsResp models.ItemsResponse
+		json.NewDecoder(getRec.Body).Decode(&targetItemsResp)
+
+		if len(targetItemsResp.Data) != 1 {
+			t.Errorf("Expected 1 item in target list, got %d", len(targetItemsResp.Data))
+		}
+
+		// Verify item is not in source list
+		getPath = fmt.Sprintf("/api/v1/lists/%s/items", sourceListID)
+		getRec = makeRequest(t, handler, "GET", getPath, nil, userID)
+		var sourceItemsResp models.ItemsResponse
+		json.NewDecoder(getRec.Body).Decode(&sourceItemsResp)
+
+		if len(sourceItemsResp.Data) != 0 {
+			t.Errorf("Expected 0 items in source list, got %d", len(sourceItemsResp.Data))
+		}
+	})
+}
+
+func TestNestedLists(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-nested"
+
+	// Create parent list
+	parentReq := models.CreateListRequest{Name: "Parent List"}
+	rec := makeRequest(t, handler, "POST", "/api/v1/lists", parentReq, userID)
+	var parentList models.ListResponse
+	json.NewDecoder(rec.Body).Decode(&parentList)
+	parentListID := parentList.ID
+
+	t.Run("Create nested list", func(t *testing.T) {
+		req := models.CreateItemRequest{
+			Name: "Nested List",
+			Type: "list",
+		}
+
+		path := fmt.Sprintf("/api/v1/lists/%s/items", parentListID)
+		rec := makeRequest(t, handler, "POST", path, req, userID)
+		if rec.Code != http.StatusCreated {
+			t.Errorf("Expected status 201, got %d: %s", rec.Code, rec.Body.String())
+			return
+		}
+
+		var nestedList models.ItemResponse
+		if err := json.NewDecoder(rec.Body).Decode(&nestedList); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
+
+		if nestedList.Type != "list" {
+			t.Errorf("Expected type 'list', got %s", nestedList.Type)
+		}
+		if nestedList.Name != "Nested List" {
+			t.Errorf("Expected name 'Nested List', got %s", nestedList.Name)
+		}
+	})
+
+	t.Run("Get items including nested lists", func(t *testing.T) {
+		// Add a regular item too
+		itemReq := models.CreateItemRequest{
+			Name: "Regular Item",
+			Type: "item",
+		}
+		path := fmt.Sprintf("/api/v1/lists/%s/items", parentListID)
+		makeRequest(t, handler, "POST", path, itemReq, userID)
+
+		// Get all items
+		getPath := fmt.Sprintf("/api/v1/lists/%s/items", parentListID)
+		rec := makeRequest(t, handler, "GET", getPath, nil, userID)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("Expected status 200, got %d", rec.Code)
+		}
+
+		var itemsResp models.ItemsResponse
+		if err := json.NewDecoder(rec.Body).Decode(&itemsResp); err != nil {
+			t.Fatalf("Failed to decode items: %v", err)
+		}
+
+		items := itemsResp.Data
+		if len(items) != 2 {
+			t.Errorf("Expected 2 items, got %d", len(items))
+		}
+
+		// Check we have one list and one item
+		hasListType := false
+		hasItemType := false
+		for _, item := range items {
+			if item.Type == "list" {
+				hasListType = true
+			}
+			if item.Type == "item" {
+				hasItemType = true
+			}
+		}
+
+		if !hasListType {
+			t.Error("Expected at least one item with type 'list'")
+		}
+		if !hasItemType {
+			t.Error("Expected at least one item with type 'item'")
 		}
 	})
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/yair12/lists-viewer/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // ItemRepositoryImpl implements ItemRepository
@@ -60,7 +61,8 @@ func (r *ItemRepositoryImpl) GetByListID(ctx context.Context, listID string, inc
 		filter["archived"] = false
 	}
 
-	cursor, err := r.collection.Find(ctx, filter)
+	opts := options.Find().SetSort(bson.D{{"order", 1}})
+	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
 	}
