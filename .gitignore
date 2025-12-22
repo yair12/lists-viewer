@@ -10,3 +10,4 @@ node_modules/
 dist/
 vendor/
 *.pem
+/k8s-images

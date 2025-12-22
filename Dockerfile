@@ -33,15 +33,23 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 # Stage 3: Runtime
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates wget && \
+    addgroup -g 1000 appgroup && \
+    adduser -D -u 1000 -G appgroup appuser
 
-WORKDIR /root/
+WORKDIR /app
 
 # Copy backend binary
 COPY --from=backend-builder /app/server .
 
 # Copy frontend static files
 COPY --from=frontend-builder /app/client/dist ./public
+
+# Set ownership and permissions
+RUN chown -R appuser:appgroup /app && \
+    chmod +x ./server
+
+USER appuser
 
 EXPOSE 8080
 

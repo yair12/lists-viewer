@@ -1,5 +1,5 @@
 import { Box } from '@mui/material';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
 
@@ -8,11 +8,17 @@ interface MainLayoutProps {
 }
 
 export default function MainLayout({ children }: MainLayoutProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
   return (
     <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
       <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-        <Header />
+        <Header onMenuClick={handleDrawerToggle} />
         <Box
           component="main"
           sx={{

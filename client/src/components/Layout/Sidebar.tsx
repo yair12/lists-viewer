@@ -12,6 +12,8 @@ import {
   CircularProgress,
   Menu,
   MenuItem,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -33,10 +35,17 @@ import CreateListDialog from '../Lists/CreateListDialog';
 
 const drawerWidth = 280;
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}
+
+export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -63,23 +72,13 @@ export default function Sidebar() {
 
   const handleListClick = (listId: string) => {
     navigate(`/lists/${listId}`);
+    if (isMobile) {
+      onMobileClose();
+    }
   };
 
-  return (
+  const drawerContent = (
     <>
-      <Drawer
-        variant="permanent"
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            boxSizing: 'border-box',
-            borderRight: 1,
-            borderColor: 'divider',
-          },
-        }}
-      >
         <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="h6" component="div">
             My Lists
@@ -174,7 +173,6 @@ export default function Sidebar() {
             </Box>
           )}
         </List>
-      </Drawer>
 
       <CreateListDialog
         open={createDialogOpen}
@@ -225,5 +223,48 @@ export default function Sidebar() {
         </>
       )}
     </>
+  );
+
+  return (
+    <Box
+      component="nav"
+      sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}
+    >
+      {/* Mobile drawer */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={onMobileClose}
+        ModalProps={{
+          keepMounted: true, // Better mobile performance
+        }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+          },
+        }}
+      >
+        {drawerContent}
+      </Drawer>
+
+      {/* Desktop drawer */}
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          '& .MuiDrawer-paper': {
+            width: drawerWidth,
+            boxSizing: 'border-box',
+            borderRight: 1,
+            borderColor: 'divider',
+          },
+        }}
+        open
+      >
+        {drawerContent}
+      </Drawer>
+    </Box>
   );
 }
