@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"log"
 
 	"github.com/yair12/lists-viewer/server/internal/models"
 	"go.mongodb.org/mongo-driver/bson"
@@ -26,6 +27,9 @@ func NewUserRepository(db *mongo.Database) UserRepository {
 func (r *UserRepositoryImpl) Create(ctx context.Context, user *models.User) error {
 	opts := options.InsertOne().SetBypassDocumentValidation(false)
 	_, err := r.collection.InsertOne(ctx, user, opts)
+	if err != nil {
+		log.Printf("[REPO_CREATE_USER] Failed to insert user: username=%s, error=%v", user.Username, err)
+	}
 	return err
 }
 

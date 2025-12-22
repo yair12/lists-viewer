@@ -17,9 +17,10 @@ import {
   Delete,
 } from '@mui/icons-material';
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { listsApi } from '../../services/api/lists';
+import { useLists } from '../../hooks/useLists';
 import EditListDialog from './EditListDialog';
 import ConfirmDialog from '../Common/ConfirmDialog';
 import type { List } from '../../types';
@@ -32,10 +33,7 @@ export default function ListsGrid() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const { data: lists, isLoading, error } = useQuery({
-    queryKey: ['lists'],
-    queryFn: listsApi.getAll,
-  });
+  const { data: lists, isLoading, error } = useLists();
 
   const deleteMutation = useMutation({
     mutationFn: (list: List) => listsApi.delete(list.id, list.version),

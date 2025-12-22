@@ -14,10 +14,11 @@ import {
   CheckCircle, 
   DeleteSweep 
 } from '@mui/icons-material';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { itemsApi } from '../../services/api/items';
+import { useItems } from '../../hooks/useItems';
 import ItemRow from './ItemRow';
 import CreateItemDialog from './CreateItemDialog';
 import ConfirmDialog from '../Common/ConfirmDialog';
@@ -34,10 +35,7 @@ export default function ItemsList({ listId }: ItemsListProps) {
   const [completeAllDialogOpen, setCompleteAllDialogOpen] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: items, isLoading } = useQuery({
-    queryKey: ['items', listId],
-    queryFn: () => itemsApi.getByListId(listId),
-  });
+  const { data: items, isLoading } = useItems(listId);
 
   const deleteCompletedMutation = useMutation({
     mutationFn: () => itemsApi.deleteCompleted(listId),

@@ -12,10 +12,9 @@ import {
   Box,
   Typography,
 } from '@mui/material';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { listsApi } from '../../services/api/lists';
-import { itemsApi } from '../../services/api/items';
+import { useLists } from '../../hooks/useLists';
+import { useMoveItem } from '../../hooks/useItems';
 import type { Item, List as ListType } from '../../types';
 
 interface MoveItemDialogProps {
@@ -32,32 +31,28 @@ export default function MoveItemDialog({
   currentListId 
 }: MoveItemDialogProps) {
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
-  const queryClient = useQueryClient();
 
-  const { data: lists, isLoading } = useQuery({
-    queryKey: ['lists'],
-    queryFn: listsApi.getAll,
-    enabled: open,
-  });
-
-  const moveMutation = useMutation({
-    mutationFn: () => 
-      itemsApi.move(currentListId, item.id, {
-        targetListId: selectedListId!,
-        order: 0,
-        version: item.version,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', currentListId] });
-      queryClient.invalidateQueries({ queryKey: ['items', selectedListId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      onClose();
-    },
-  });
+  const { data: lists, isLoading } = useLists();
+  const moveMutation = useMoveItem();
 
   const handleMove = () => {
     if (selectedListId) {
-      moveMutation.mutate();
+      moveMutation.mutate(
+        {
+          sourceListId: currentListId,
+          itemId: item.id,
+          data: {
+            targetListId: selectedListId,
+            order: 0,
+            version: item.version,
+          },
+        },
+        {
+          onSettled: () => {
+            onClose();
+          },
+        }
+      );
     }
   };
 

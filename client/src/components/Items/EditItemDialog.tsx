@@ -9,9 +9,8 @@ import {
   MenuItem,
 } from '@mui/material';
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { itemsApi } from '../../services/api/items';
 import { QUANTITY_TYPES } from '../../utils/constants';
+import { useUpdateItem } from '../../hooks/useItems';
 import type { Item, UpdateItemRequest } from '../../types';
 
 interface EditItemDialogProps {
@@ -26,7 +25,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
   const [description, setDescription] = useState(item.description || '');
   const [quantity, setQuantity] = useState(item.quantity?.toString() || '');
   const [quantityType, setQuantityType] = useState<string>(item.quantityType || QUANTITY_TYPES[0]);
-  const queryClient = useQueryClient();
+  const updateMutation = useUpdateItem();
 
   useEffect(() => {
     if (open) {
@@ -36,15 +35,6 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
       setQuantityType(item.quantityType || QUANTITY_TYPES[0]);
     }
   }, [open, item]);
-
-  const updateMutation = useMutation({
-    mutationFn: (data: UpdateItemRequest) => itemsApi.update(listId, item.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      onClose();
-    },
-  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +48,15 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
       ...(item.type === 'item' && quantity && { quantityType }),
     };
 
-    updateMutation.mutate(payload);
+    updateMutation.mutate(
+      { listId, itemId: item.id, data: payload },
+      {
+        onSettled: () => {
+          // Close dialog whether online save succeeded or offline save was queued
+          onClose();
+        },
+      }
+    );
   };
 
   return (

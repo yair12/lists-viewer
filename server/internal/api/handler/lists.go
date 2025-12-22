@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/yair12/lists-viewer/server/internal/api"
@@ -151,15 +153,16 @@ func (h *ListHandler) DeleteList(w http.ResponseWriter, r *http.Request) {
 
 	err := h.service.DeleteList(r.Context(), listID, userID, req.Version)
 	if err != nil {
-		if err.Error() == "version_conflict" {
+		log.Printf("[HANDLER_DELETE_LIST] Service returned error for uuid=%s: error=%v, error_string=%s", listID, err, err.Error())
+		if strings.Contains(err.Error(), "version_conflict") {
+			log.Printf("[HANDLER_DELETE_LIST] Returning 409 Conflict for uuid=%s", listID)
 			api.ErrorResponse(w, http.StatusConflict, "version_conflict", "List was modified by another user", nil)
 		} else {
+			log.Printf("[HANDLER_DELETE_LIST] Calling ErrorHandler for uuid=%s", listID)
 			api.ErrorHandler(w, err)
 		}
 		return
 	}
-
-	w.WriteHeader(http.StatusNoContent)
 
 	w.WriteHeader(http.StatusNoContent)
 }

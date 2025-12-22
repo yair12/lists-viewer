@@ -770,3 +770,356 @@ func TestNestedLists(t *testing.T) {
 func ptrInt32(v int32) *int32 {
 	return &v
 }
+
+// TestOptimisticLockingListUpdate tests concurrent list updates with version conflicts
+func TestOptimisticLockingListUpdate(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-optimistic"
+
+	t.Run("Update with outdated version should fail", func(t *testing.T) {
+		// Create a list
+		createReq := models.CreateListRequest{
+			Name:        "Test List",
+			Description: "Original description",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createReq, userID)
+
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("Expected status 201, got %d: %s", rec.Code, rec.Body.String())
+		}
+
+		var list models.ListResponse
+		if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		originalVersion := list.Version
+
+		// First update (should succeed)
+		updateReq1 := models.UpdateListRequest{
+			Name:        "Updated Name 1",
+			Description: "Updated description 1",
+			Version:     originalVersion,
+		}
+		path := fmt.Sprintf("/api/v1/lists/%s", list.ID)
+		rec1 := makeRequest(t, handler, "PUT", path, updateReq1, userID)
+
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("First update failed with status %d: %s", rec1.Code, rec1.Body.String())
+		}
+
+		var updatedList1 models.ListResponse
+		if err := json.Unmarshal(rec1.Body.Bytes(), &updatedList1); err != nil {
+			t.Fatalf("Failed to parse first update response: %v", err)
+		}
+
+		if updatedList1.Version != originalVersion+1 {
+			t.Errorf("Expected version %d, got %d", originalVersion+1, updatedList1.Version)
+		}
+
+		// Second update with OUTDATED version (should fail with 409 Conflict)
+		updateReq2 := models.UpdateListRequest{
+			Name:        "Updated Name 2",
+			Description: "Updated description 2",
+			Version:     originalVersion, // Using old version
+		}
+		rec2 := makeRequest(t, handler, "PUT", path, updateReq2, userID)
+
+		if rec2.Code != http.StatusConflict {
+			t.Errorf("Expected status 409 Conflict, got %d: %s", rec2.Code, rec2.Body.String())
+		}
+
+		var errResp models.APIError
+		if err := json.Unmarshal(rec2.Body.Bytes(), &errResp); err != nil {
+			t.Fatalf("Failed to parse error response: %v", err)
+		}
+
+		if errResp.Error != "version_conflict" {
+			t.Errorf("Expected error code 'version_conflict', got '%s'", errResp.Error)
+		}
+
+		// Verify the list still has the first update
+		recGet := makeRequest(t, handler, "GET", path, nil, userID)
+		var finalList models.ListResponse
+		if err := json.Unmarshal(recGet.Body.Bytes(), &finalList); err != nil {
+			t.Fatalf("Failed to parse get response: %v", err)
+		}
+
+		if finalList.Name != "Updated Name 1" {
+			t.Errorf("Expected name 'Updated Name 1', got '%s'", finalList.Name)
+		}
+		if finalList.Version != originalVersion+1 {
+			t.Errorf("Expected version %d, got %d", originalVersion+1, finalList.Version)
+		}
+	})
+}
+
+// TestOptimisticLockingListDelete tests concurrent list deletion with version conflicts
+func TestOptimisticLockingListDelete(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-delete-optimistic"
+
+	t.Run("Delete with outdated version should fail", func(t *testing.T) {
+		// Create a list
+		createReq := models.CreateListRequest{
+			Name: "List to Delete",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createReq, userID)
+
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+		originalVersion := list.Version
+
+		// Update the list to increment version
+		updateReq := models.UpdateListRequest{
+			Name:    "Updated Name",
+			Version: originalVersion,
+		}
+		path := fmt.Sprintf("/api/v1/lists/%s", list.ID)
+		makeRequest(t, handler, "PUT", path, updateReq, userID)
+
+		// Try to delete with OUTDATED version (should fail with 409)
+		deleteReq := models.DeleteListRequest{
+			Version: originalVersion, // Old version
+		}
+		recDelete := makeRequest(t, handler, "DELETE", path, deleteReq, userID)
+
+		if recDelete.Code != http.StatusConflict {
+			t.Errorf("Expected status 409 Conflict, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+
+		// Verify list still exists
+		recGet := makeRequest(t, handler, "GET", path, nil, userID)
+		if recGet.Code != http.StatusOK {
+			t.Error("List should still exist after failed delete")
+		}
+	})
+
+	t.Run("Delete with correct version should succeed", func(t *testing.T) {
+		// Create a list
+		createReq := models.CreateListRequest{
+			Name: "List to Delete 2",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createReq, userID)
+
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+
+		// Delete with correct version
+		deleteReq := models.DeleteListRequest{
+			Version: list.Version,
+		}
+		path := fmt.Sprintf("/api/v1/lists/%s", list.ID)
+		recDelete := makeRequest(t, handler, "DELETE", path, deleteReq, userID)
+
+		if recDelete.Code != http.StatusNoContent {
+			t.Errorf("Expected status 204, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+
+		// Verify list is deleted
+		recGet := makeRequest(t, handler, "GET", path, nil, userID)
+		if recGet.Code == http.StatusOK {
+			t.Error("List should be deleted")
+		}
+	})
+
+	t.Run("Delete non-existent list should be idempotent", func(t *testing.T) {
+		// Try to delete a non-existent list
+		deleteReq := models.DeleteListRequest{
+			Version: 1,
+		}
+		path := "/api/v1/lists/non-existent-uuid-12345"
+		recDelete := makeRequest(t, handler, "DELETE", path, deleteReq, userID)
+
+		// Should succeed (idempotent)
+		if recDelete.Code != http.StatusNoContent {
+			t.Errorf("Expected status 204 for idempotent delete, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+	})
+}
+
+// TestOptimisticLockingItemUpdate tests concurrent item updates with version conflicts
+func TestOptimisticLockingItemUpdate(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-item-optimistic"
+
+	t.Run("Update item with outdated version should fail", func(t *testing.T) {
+		// Create a list first
+		createListReq := models.CreateListRequest{
+			Name: "Test List for Items",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createListReq, userID)
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+
+		// Create an item
+		createItemReq := models.CreateItemRequest{
+			Type: "item",
+			Name: "Test Item",
+		}
+		itemPath := fmt.Sprintf("/api/v1/lists/%s/items", list.ID)
+		recItem := makeRequest(t, handler, "POST", itemPath, createItemReq, userID)
+
+		var item models.ItemResponse
+		json.Unmarshal(recItem.Body.Bytes(), &item)
+		originalVersion := item.Version
+
+		// First update (should succeed)
+		updateReq1 := models.UpdateItemRequest{
+			Name:      "Updated Item 1",
+			Completed: ptrBool(false),
+			Version:   originalVersion,
+		}
+		updatePath := fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID)
+		rec1 := makeRequest(t, handler, "PUT", updatePath, updateReq1, userID)
+
+		if rec1.Code != http.StatusOK {
+			t.Fatalf("First update failed with status %d: %s", rec1.Code, rec1.Body.String())
+		}
+
+		var updatedItem1 models.ItemResponse
+		json.Unmarshal(rec1.Body.Bytes(), &updatedItem1)
+
+		if updatedItem1.Version != originalVersion+1 {
+			t.Errorf("Expected version %d, got %d", originalVersion+1, updatedItem1.Version)
+		}
+
+		// Second update with OUTDATED version (should fail)
+		updateReq2 := models.UpdateItemRequest{
+			Name:      "Updated Item 2",
+			Completed: ptrBool(true),
+			Version:   originalVersion, // Old version
+		}
+		rec2 := makeRequest(t, handler, "PUT", updatePath, updateReq2, userID)
+
+		if rec2.Code != http.StatusConflict {
+			t.Errorf("Expected status 409 Conflict, got %d: %s", rec2.Code, rec2.Body.String())
+		}
+
+		// Verify item still has first update
+		recGet := makeRequest(t, handler, "GET", updatePath, nil, userID)
+		var finalItem models.ItemResponse
+		json.Unmarshal(recGet.Body.Bytes(), &finalItem)
+
+		if finalItem.Name != "Updated Item 1" {
+			t.Errorf("Expected name 'Updated Item 1', got '%s'", finalItem.Name)
+		}
+		if finalItem.Version != originalVersion+1 {
+			t.Errorf("Expected version %d, got %d", originalVersion+1, finalItem.Version)
+		}
+	})
+}
+
+// TestOptimisticLockingItemDelete tests concurrent item deletion with version conflicts
+func TestOptimisticLockingItemDelete(t *testing.T) {
+	clearDatabase(t)
+	handler := setupTestRouter(t)
+	userID := "test-user-item-delete-optimistic"
+
+	t.Run("Delete item with outdated version should fail", func(t *testing.T) {
+		// Create a list and item
+		createListReq := models.CreateListRequest{
+			Name: "Test List",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createListReq, userID)
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+
+		createItemReq := models.CreateItemRequest{
+			Type: "item",
+			Name: "Item to Delete",
+		}
+		itemPath := fmt.Sprintf("/api/v1/lists/%s/items", list.ID)
+		recItem := makeRequest(t, handler, "POST", itemPath, createItemReq, userID)
+
+		var item models.ItemResponse
+		json.Unmarshal(recItem.Body.Bytes(), &item)
+		originalVersion := item.Version
+
+		// Update the item to increment version
+		updateReq := models.UpdateItemRequest{
+			Name:      "Updated Item",
+			Completed: ptrBool(false),
+			Version:   originalVersion,
+		}
+		updatePath := fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID)
+		makeRequest(t, handler, "PUT", updatePath, updateReq, userID)
+
+		// Try to delete with OUTDATED version (should fail)
+		deleteReq := models.DeleteItemRequest{
+			Version: originalVersion, // Old version
+		}
+		recDelete := makeRequest(t, handler, "DELETE", updatePath, deleteReq, userID)
+
+		if recDelete.Code != http.StatusConflict {
+			t.Errorf("Expected status 409 Conflict, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+
+		// Verify item still exists
+		recGet := makeRequest(t, handler, "GET", updatePath, nil, userID)
+		if recGet.Code != http.StatusOK {
+			t.Error("Item should still exist after failed delete")
+		}
+	})
+
+	t.Run("Delete item with correct version should succeed", func(t *testing.T) {
+		// Create a list and item
+		createListReq := models.CreateListRequest{
+			Name: "Test List 2",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createListReq, userID)
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+
+		createItemReq := models.CreateItemRequest{
+			Type: "item",
+			Name: "Item to Delete 2",
+		}
+		itemPath := fmt.Sprintf("/api/v1/lists/%s/items", list.ID)
+		recItem := makeRequest(t, handler, "POST", itemPath, createItemReq, userID)
+
+		var item models.ItemResponse
+		json.Unmarshal(recItem.Body.Bytes(), &item)
+
+		// Delete with correct version
+		deleteReq := models.DeleteItemRequest{
+			Version: item.Version,
+		}
+		deletePath := fmt.Sprintf("/api/v1/lists/%s/items/%s", list.ID, item.ID)
+		recDelete := makeRequest(t, handler, "DELETE", deletePath, deleteReq, userID)
+
+		if recDelete.Code != http.StatusNoContent {
+			t.Errorf("Expected status 204, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+	})
+
+	t.Run("Delete non-existent item should be idempotent", func(t *testing.T) {
+		// Create a list
+		createListReq := models.CreateListRequest{
+			Name: "Test List 3",
+		}
+		rec := makeRequest(t, handler, "POST", "/api/v1/lists", createListReq, userID)
+		var list models.ListResponse
+		json.Unmarshal(rec.Body.Bytes(), &list)
+
+		// Try to delete non-existent item
+		deleteReq := models.DeleteItemRequest{
+			Version: 1,
+		}
+		deletePath := fmt.Sprintf("/api/v1/lists/%s/items/non-existent-item-12345", list.ID)
+		recDelete := makeRequest(t, handler, "DELETE", deletePath, deleteReq, userID)
+
+		// Should succeed (idempotent)
+		if recDelete.Code != http.StatusNoContent {
+			t.Errorf("Expected status 204 for idempotent delete, got %d: %s", recDelete.Code, recDelete.Body.String())
+		}
+	})
+}
+
+// Helper function to create pointer to bool
+func ptrBool(v bool) *bool {
+	return &v
+}

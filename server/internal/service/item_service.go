@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/yair12/lists-viewer/server/internal/models"
@@ -53,10 +54,13 @@ func (s *ItemService) CreateItem(ctx context.Context, listID string, req *models
 	}
 	item.Order = maxOrder + 1
 
+	log.Printf("[SERVICE_CREATE_ITEM] Creating item: uuid=%s, listID=%s, name=%s, type=%s, order=%d", item.UUID, listID, item.Name, item.Type, item.Order)
 	if err := s.repo.Item.Create(ctx, item); err != nil {
+		log.Printf("[SERVICE_CREATE_ITEM] Failed to create item: uuid=%s, error=%v", item.UUID, err)
 		return nil, fmt.Errorf("failed to create item: %w", err)
 	}
 
+	log.Printf("[SERVICE_CREATE_ITEM] Successfully created item: uuid=%s", item.UUID)
 	return s.mapItemToResponse(item), nil
 }
 
@@ -91,18 +95,22 @@ func (s *ItemService) GetItemsByList(ctx context.Context, listID string, include
 
 // UpdateItem updates an item
 func (s *ItemService) UpdateItem(ctx context.Context, listID string, itemID string, req *models.UpdateItemRequest, userID string) (*models.ItemResponse, error) {
+	log.Printf("[SERVICE_UPDATE_ITEM] Updating item: itemID=%s, listID=%s, version=%d", itemID, listID, req.Version)
 	// Get existing item
 	existingItem, err := s.repo.Item.GetByID(ctx, listID, itemID)
 	if err != nil {
+		log.Printf("[SERVICE_UPDATE_ITEM] Error retrieving item: itemID=%s, error=%v", itemID, err)
 		return nil, fmt.Errorf("failed to get item: %w", err)
 	}
 
 	if existingItem == nil {
+		log.Printf("[SERVICE_UPDATE_ITEM] Item not found: itemID=%s", itemID)
 		return nil, fmt.Errorf("item not found")
 	}
 
 	// Check version
 	if existingItem.Version != req.Version {
+		log.Printf("[SERVICE_UPDATE_ITEM] Version conflict: itemID=%s, requested=%d, current=%d", itemID, req.Version, existingItem.Version)
 		return nil, fmt.Errorf("version_conflict")
 	}
 
@@ -123,18 +131,23 @@ func (s *ItemService) UpdateItem(ctx context.Context, listID string, itemID stri
 	}
 
 	if err := s.repo.Item.Update(ctx, existingItem); err != nil {
+		log.Printf("[SERVICE_UPDATE_ITEM] Failed to update item: itemID=%s, error=%v", itemID, err)
 		return nil, fmt.Errorf("failed to update item: %w", err)
 	}
 
+	log.Printf("[SERVICE_UPDATE_ITEM] Successfully updated item: itemID=%s, new_version=%d", itemID, existingItem.Version)
 	return s.mapItemToResponse(existingItem), nil
 }
 
 // DeleteItem deletes an item
 func (s *ItemService) DeleteItem(ctx context.Context, listID string, itemID string, userID string, version int32) error {
+	log.Printf("[SERVICE_DELETE_ITEM] Deleting item: itemID=%s, listID=%s, version=%d", itemID, listID, version)
 	if err := s.repo.Item.Delete(ctx, listID, itemID, userID, version); err != nil {
+		log.Printf("[SERVICE_DELETE_ITEM] Failed to delete item: itemID=%s, error=%v", itemID, err)
 		return fmt.Errorf("failed to delete item: %w", err)
 	}
 
+	log.Printf("[SERVICE_DELETE_ITEM] Successfully deleted item: itemID=%s", itemID)
 	return nil
 }
 

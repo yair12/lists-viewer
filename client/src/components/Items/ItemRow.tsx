@@ -18,8 +18,8 @@ import {
 } from '@mui/icons-material';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { itemsApi } from '../../services/api/items';
+import { useUpdateItem, useDeleteItem } from '../../hooks/useItems';
+import { useItemPendingSync } from '../../hooks/useSyncStatus';
 import EditItemDialog from './EditItemDialog';
 import ConfirmDialog from '../Common/ConfirmDialog';
 import MoveItemDialog from './MoveItemDialog';
@@ -31,37 +31,30 @@ interface ItemRowProps {
 }
 
 export default function ItemRow({ item, listId }: ItemRowProps) {
-  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
 
-  const updateMutation = useMutation({
-    mutationFn: (completed: boolean) =>
-      itemsApi.update(listId, item.id, {
-        name: item.name,
-        completed,
-        version: item.version,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: () => itemsApi.delete(listId, item.id, item.version),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      setDeleteDialogOpen(false);
-    },
-  });
+  const updateMutation = useUpdateItem();
+  const deleteMutation = useDeleteItem();
+  
+  // Check if this item has pending sync operations
+  const { data: isPendingSync = false } = useItemPendingSync(item.id);
+  const isTempId = item.id.startsWith('temp-');
+  const showPendingIndicator = isTempId || isPendingSync;
 
   const handleToggle = () => {
-    updateMutation.mutate(!item.completed);
+    updateMutation.mutate({
+      listId,
+      itemId: item.id,
+      data: {
+        name: item.name,
+        completed: !item.completed,
+        version: item.version,
+      },
+    });
   };
 
   const handleEdit = () => {
@@ -72,6 +65,13 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
   const handleDelete = () => {
     setMenuAnchor(null);
     setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    deleteMutation.mutate(
+      { listId, itemId: item.id, version: item.version },
+      { onSettled: () => setDeleteDialogOpen(false) }
+    );
   };
 
   const handleMove = () => {
@@ -122,8 +122,9 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
         px: 1,
         borderRadius: 1,
         cursor: 'pointer',
+        bgcolor: showPendingIndicator ? 'warning.dark' : 'transparent',
         '&:hover': {
-          bgcolor: 'action.hover',
+          bgcolor: showPendingIndicator ? 'warning.main' : 'action.hover',
         },
       }}
     >
@@ -151,6 +152,10 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
         </Typography>
         
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+          {showPendingIndicator && (
+            <Chip label="Pending Sync" size="small" color="warning" />
+          )}
+          
           {item.type === 'list' && (
             <Chip label="List" size="small" color="primary" variant="outlined" />
           )}
@@ -242,7 +247,7 @@ export default function ItemRow({ item, listId }: ItemRowProps) {
           item.type === 'list' ? ' This will also delete all items in this nested list.' : ''
         }`}
         confirmText="Delete"
-        onConfirm={() => deleteMutation.mutate()}
+        onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteDialogOpen(false)}
         isLoading={deleteMutation.isPending}
       />

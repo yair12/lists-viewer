@@ -9,8 +9,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { listsApi } from '../../services/api/lists';
+import { useCreateList } from '../../hooks/useLists';
 
 interface CreateListDialogProps {
   open: boolean;
@@ -28,15 +27,8 @@ export default function CreateListDialog({ open, onClose }: CreateListDialogProp
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedColor, setSelectedColor] = useState(colors[0]);
-  const queryClient = useQueryClient();
 
-  const createMutation = useMutation({
-    mutationFn: listsApi.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      handleClose();
-    },
-  });
+  const createMutation = useCreateList();
 
   const handleClose = () => {
     setName('');
@@ -49,10 +41,16 @@ export default function CreateListDialog({ open, onClose }: CreateListDialogProp
     e.preventDefault();
     if (!name.trim()) return;
 
-    createMutation.mutate({
+    const payload = {
       name: name.trim(),
-      description: description.trim(),
+      description: description.trim() || undefined,
       color: selectedColor,
+    };
+
+    createMutation.mutate(payload, {
+      onSettled: () => {
+        handleClose();
+      },
     });
   };
 

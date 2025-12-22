@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	"github.com/yair12/lists-viewer/server/internal/api"
@@ -175,9 +176,12 @@ func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 
 	err := h.service.DeleteItem(r.Context(), listID, itemID, userID, req.Version)
 	if err != nil {
-		if err.Error() == "version_conflict" {
+		log.Printf("[HANDLER_DELETE_ITEM] Service returned error for uuid=%s: error=%v, error_string=%s", itemID, err, err.Error())
+		if strings.Contains(err.Error(), "version_conflict") {
+			log.Printf("[HANDLER_DELETE_ITEM] Returning 409 Conflict for uuid=%s", itemID)
 			api.ErrorResponse(w, http.StatusConflict, "version_conflict", "Item was modified by another user", nil)
 		} else {
+			log.Printf("[HANDLER_DELETE_ITEM] Calling ErrorHandler for uuid=%s", itemID)
 			api.ErrorHandler(w, err)
 		}
 		return

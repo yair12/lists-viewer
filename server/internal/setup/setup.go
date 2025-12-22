@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 
 // SetupRouter initializes and configures the Gorilla Mux router with all handlers
 func SetupRouter(dbClient *mongo.Client) http.Handler {
+	log.Printf("[SETUP] Initializing router and dependencies...")
 	router := mux.NewRouter()
 
 	// Get database
@@ -95,6 +97,7 @@ func SetupRouter(dbClient *mongo.Client) http.Handler {
 		})
 	}
 
+	log.Printf("[SETUP] Router initialization complete. All handlers registered.")
 	// Apply CORS middleware to all routes
 	return api.CorsMiddleware(router)
 }

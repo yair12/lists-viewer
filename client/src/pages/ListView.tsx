@@ -2,7 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, IconButton, Divider, CircularProgress, Menu, MenuItem } from '@mui/material';
 import { ArrowBack, MoreVert, Edit, Delete } from '@mui/icons-material';
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { DragDropContext, DropResult } from '@hello-pangea/dnd';
 import MainLayout from '../components/Layout/MainLayout';
 import ItemsList from '../components/Items/ItemsList';
@@ -10,6 +10,7 @@ import EditListDialog from '../components/Lists/EditListDialog';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
 import { listsApi } from '../services/api/lists';
 import { itemsApi } from '../services/api/items';
+import { useList } from '../hooks/useLists';
 
 export default function ListView() {
   const { listId } = useParams<{ listId: string }>();
@@ -19,11 +20,7 @@ export default function ListView() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-  const { data: list, isLoading } = useQuery({
-    queryKey: ['list', listId],
-    queryFn: () => listsApi.getById(listId!),
-    enabled: !!listId,
-  });
+  const { data: list, isLoading } = useList(listId!);
 
   const deleteMutation = useMutation({
     mutationFn: () => listsApi.delete(listId!, list?.version || 1),

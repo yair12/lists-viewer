@@ -9,8 +9,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { listsApi } from '../../services/api/lists';
+import { useUpdateList } from '../../hooks/useLists';
 import type { List, UpdateListRequest } from '../../types';
 
 const COLORS = [
@@ -30,7 +29,6 @@ export default function EditListDialog({ open, onClose, list }: EditListDialogPr
   const [name, setName] = useState(list.name);
   const [description, setDescription] = useState(list.description || '');
   const [selectedColor, setSelectedColor] = useState(list.color || COLORS[0]);
-  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (open) {
@@ -40,25 +38,27 @@ export default function EditListDialog({ open, onClose, list }: EditListDialogPr
     }
   }, [open, list]);
 
-  const updateMutation = useMutation({
-    mutationFn: (data: UpdateListRequest) => listsApi.update(list.id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      queryClient.invalidateQueries({ queryKey: ['list', list.id] });
-      onClose();
-    },
-  });
+  const updateMutation = useUpdateList();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    updateMutation.mutate({
+    const payload: UpdateListRequest = {
       name: name.trim(),
       description: description.trim() || undefined,
       color: selectedColor,
       version: list.version,
-    });
+    };
+
+    updateMutation.mutate(
+      { listId: list.id, data: payload },
+      {
+        onSettled: () => {
+          onClose();
+        },
+      }
+    );
   };
 
   return (

@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/yair12/lists-viewer/server/internal/models"
 )
@@ -25,16 +27,20 @@ func ErrorHandler(w http.ResponseWriter, err error) {
 		return
 	}
 
+	log.Printf("[ERROR_HANDLER] Received error: %v, error_string=%s, error_type=%T", err, err.Error(), err)
+
+	errMsg := err.Error()
 	switch {
-	case errors.Is(err, errors.New("version_conflict")):
+	case strings.Contains(errMsg, "version_conflict"):
+		log.Printf("[ERROR_HANDLER] Matched version_conflict case")
 		ErrorResponse(w, http.StatusConflict, "version_conflict", "Resource was modified by another user", nil)
-	case errors.Is(err, errors.New("list not found")):
+	case strings.Contains(errMsg, "list not found"):
 		ErrorResponse(w, http.StatusNotFound, "not_found", "List not found", nil)
-	case errors.Is(err, errors.New("item not found")):
+	case strings.Contains(errMsg, "item not found"):
 		ErrorResponse(w, http.StatusNotFound, "not_found", "Item not found", nil)
-	case errors.Is(err, errors.New("user not found")):
+	case strings.Contains(errMsg, "user not found"):
 		ErrorResponse(w, http.StatusNotFound, "not_found", "User not found", nil)
-	case errors.Is(err, errors.New("unauthorized")):
+	case strings.Contains(errMsg, "unauthorized"):
 		ErrorResponse(w, http.StatusUnauthorized, "unauthorized", "Missing or invalid user ID", nil)
 	default:
 		ErrorResponse(w, http.StatusInternalServerError, "internal_error", "An internal error occurred", nil)

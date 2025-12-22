@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/yair12/lists-viewer/server/internal/models"
@@ -33,8 +34,15 @@ func (r *ItemRepositoryImpl) Create(ctx context.Context, item *models.Item) erro
 		item.Completed = false
 	}
 
+	log.Printf("[REPO_CREATE_ITEM] Creating item: uuid=%s, listID=%s, name=%s, type=%s", item.UUID, item.ListID, item.Name, item.Type)
 	_, err := r.collection.InsertOne(ctx, item)
-	return err
+	if err != nil {
+		log.Printf("[REPO_CREATE_ITEM] Failed to insert item: uuid=%s, error=%v", item.UUID, err)
+		return err
+	}
+
+	log.Printf("[REPO_CREATE_ITEM] Successfully created item: uuid=%s", item.UUID)
+	return nil
 }
 
 // GetByID retrieves an item by ID
@@ -47,8 +55,10 @@ func (r *ItemRepositoryImpl) GetByID(ctx context.Context, listID string, itemID 
 
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("[REPO_GET_ITEM] Item not found: itemID=%s, listID=%s", itemID, listID)
 			return nil, nil
 		}
+		log.Printf("[REPO_GET_ITEM] Database error: itemID=%s, listID=%s, error=%v", itemID, listID, err)
 		return nil, err
 	}
 	return &item, nil
@@ -83,6 +93,7 @@ func (r *ItemRepositoryImpl) GetByListID(ctx context.Context, listID string, inc
 func (r *ItemRepositoryImpl) Update(ctx context.Context, item *models.Item) error {
 	item.UpdatedAt = time.Now()
 
+	log.Printf("[REPO_UPDATE_ITEM] Updating item: uuid=%s, listID=%s, version=%d", item.UUID, item.ListID, item.Version)
 	result, err := r.collection.UpdateOne(
 		ctx,
 		bson.M{
@@ -100,28 +111,32 @@ func (r *ItemRepositoryImpl) Update(ctx context.Context, item *models.Item) erro
 				"userIconId":         item.UserIconID,
 				"updatedAt":          item.UpdatedAt,
 				"updatedBy":          item.UpdatedBy,
-				"version":            item.Version + 1,
 				"description":        item.Description,
 				"itemCount":          item.ItemCount,
 				"completedItemCount": item.CompletedItemCount,
 			},
+			"$inc": bson.M{"version": 1},
 		},
 	)
 
 	if err != nil {
+		log.Printf("[REPO_UPDATE_ITEM] Database error: uuid=%s, error=%v", item.UUID, err)
 		return err
 	}
 
 	if result.ModifiedCount == 0 {
+		log.Printf("[REPO_UPDATE_ITEM] Version conflict: uuid=%s, version=%d", item.UUID, item.Version)
 		return errors.New("version_conflict")
 	}
 
 	item.Version = item.Version + 1
+	log.Printf("[REPO_UPDATE_ITEM] Successfully updated item: uuid=%s, new_version=%d", item.UUID, item.Version)
 	return nil
 }
 
 // Delete deletes an item (with optimistic locking)
 func (r *ItemRepositoryImpl) Delete(ctx context.Context, listID string, itemID string, userID string, version int32) error {
+	// Atomic delete with version check in single statement
 	result, err := r.collection.DeleteOne(ctx, bson.M{
 		"uuid":    itemID,
 		"listId":  listID,
@@ -132,8 +147,28 @@ func (r *ItemRepositoryImpl) Delete(ctx context.Context, listID string, itemID s
 		return err
 	}
 
+	// If nothing was deleted, check if it's because version mismatch or doesn't exist
 	if result.DeletedCount == 0 {
-		return errors.New("version_conflict")
+		// Check if the item exists with different version
+		var existingItem models.Item
+		err := r.collection.FindOne(ctx, bson.M{
+			"uuid":   itemID,
+			"listId": listID,
+		}).Decode(&existingItem)
+		if err == nil {
+			// Item exists but version doesn't match - conflict
+			log.Printf("[REPO_DELETE_ITEM] Version conflict detected for uuid=%s, requested_version=%d, current_version=%d", itemID, version, existingItem.Version)
+			return errors.New("version_conflict")
+		}
+		// Check if error is "no documents" which means item doesn't exist
+		if err == mongo.ErrNoDocuments {
+			// Item doesn't exist - idempotent success
+			log.Printf("[REPO_DELETE_ITEM] Item not found (idempotent delete): uuid=%s", itemID)
+			return nil
+		}
+		// Some other database error
+		log.Printf("[REPO_DELETE_ITEM] FindOne error after failed delete: uuid=%s, error=%v", itemID, err)
+		return err
 	}
 
 	return nil

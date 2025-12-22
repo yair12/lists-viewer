@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 
 	"github.com/google/uuid"
@@ -22,13 +23,16 @@ func NewUserService(repo *repository.Repositories) *UserService {
 
 // InitUser initializes or creates a user
 func (s *UserService) InitUser(ctx context.Context, req *models.InitUserRequest) (*models.UserResponse, error) {
+	log.Printf("[SERVICE_INIT_USER] Initializing user: username=%s", req.Username)
 	// Check if user exists
 	existingUser, err := s.repo.User.GetByUsername(ctx, req.Username)
 	if err != nil {
+		log.Printf("[SERVICE_INIT_USER] Error checking existing user: username=%s, error=%v", req.Username, err)
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	if existingUser != nil {
+		log.Printf("[SERVICE_INIT_USER] User already exists: username=%s, uuid=%s", req.Username, existingUser.UUID)
 		return s.mapUserToResponse(existingUser), nil
 	}
 
@@ -44,10 +48,13 @@ func (s *UserService) InitUser(ctx context.Context, req *models.InitUserRequest)
 		},
 	}
 
+	log.Printf("[SERVICE_INIT_USER] Creating new user: username=%s, uuid=%s", user.Username, user.UUID)
 	if err := s.repo.User.Create(ctx, user); err != nil {
+		log.Printf("[SERVICE_INIT_USER] Failed to create user: username=%s, error=%v", user.Username, err)
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	log.Printf("[SERVICE_INIT_USER] Successfully created user: username=%s, uuid=%s", user.Username, user.UUID)
 	return s.mapUserToResponse(user), nil
 }
 

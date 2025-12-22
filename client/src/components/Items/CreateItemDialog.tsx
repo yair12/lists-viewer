@@ -13,9 +13,8 @@ import {
 } from '@mui/material';
 import { CheckBox, List as ListIcon } from '@mui/icons-material';
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { itemsApi } from '../../services/api/items';
 import { QUANTITY_TYPES, USER_STORAGE_KEY } from '../../utils/constants';
+import { useCreateItem } from '../../hooks/useItems';
 import type { CreateItemRequest } from '../../types';
 
 interface CreateItemDialogProps {
@@ -30,19 +29,11 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('');
   const [quantityType, setQuantityType] = useState<string>(QUANTITY_TYPES[0]);
-  const queryClient = useQueryClient();
 
   const userStr = localStorage.getItem(USER_STORAGE_KEY);
   const user = userStr ? JSON.parse(userStr) : null;
 
-  const createMutation = useMutation({
-    mutationFn: (data: CreateItemRequest) => itemsApi.create(listId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
-      handleClose();
-    },
-  });
+  const createMutation = useCreateItem();
 
   const handleClose = () => {
     setType('item');
@@ -66,7 +57,14 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
       ...(user && { userIconId: user.iconId }),
     };
 
-    createMutation.mutate(payload);
+    createMutation.mutate(
+      { listId, data: payload },
+      {
+        onSettled: () => {
+          handleClose();
+        },
+      }
+    );
   };
 
   return (
