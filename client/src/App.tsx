@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,6 +7,7 @@ import { darkTheme } from './styles/theme';
 import { USER_STORAGE_KEY } from './utils/constants';
 import Onboarding from './pages/Onboarding';
 import Home from './pages/Home';
+import ListView from './pages/ListView';
 import type { User } from './types';
 import './App.css';
 
@@ -54,7 +56,13 @@ function App() {
         {!user ? (
           <Onboarding onComplete={handleOnboardingComplete} />
         ) : (
-          <Home />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/lists/:listId" element={<ListView />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
         )}
       </ThemeProvider>
     </QueryClientProvider>

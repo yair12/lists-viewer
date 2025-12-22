@@ -69,6 +69,7 @@ export interface CreateListRequest {
 export interface UpdateListRequest {
   name: string;
   description?: string;
+  color?: string;
   version: number;
 }
 

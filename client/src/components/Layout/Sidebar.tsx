@@ -10,32 +10,59 @@ import {
   IconButton,
   Divider,
   CircularProgress,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   Add as AddIcon,
   List as ListIcon,
   Inbox as InboxIcon,
+  MoreVert,
+  Edit,
+  Delete,
 } from '@mui/icons-material';
-import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Droppable } from '@hello-pangea/dnd';
 import { listsApi } from '../../services/api/lists';
+import EditListDialog from '../Lists/EditListDialog';
+import ConfirmDialog from '../Common/ConfirmDialog';
 import type { List as ListType } from '../../types';
 import CreateListDialog from '../Lists/CreateListDialog';
 
 const drawerWidth = 280;
 
 export default function Sidebar() {
-  const [selectedListId, setSelectedListId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedListForMenu, setSelectedListForMenu] = useState<ListType | null>(null);
 
   const { data: lists, isLoading } = useQuery({
     queryKey: ['lists'],
     queryFn: listsApi.getAll,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (list: ListType) => listsApi.delete(list.id, list.version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] });
+      setDeleteDialogOpen(false);
+      navigate('/');
+    },
+  });
+
+  const selectedListId = location.pathname.startsWith('/lists/') 
+    ? location.pathname.split('/')[2] 
+    : null;
+
   const handleListClick = (listId: string) => {
-    setSelectedListId(listId);
-    // TODO: Navigate to list view
+    navigate(`/lists/${listId}`);
   };
 
   return (
@@ -72,7 +99,7 @@ export default function Sidebar() {
           <ListItem disablePadding>
             <ListItemButton
               selected={selectedListId === null}
-              onClick={() => setSelectedListId(null)}
+              onClick={() => navigate('/')}
             >
               <ListItemIcon>
                 <InboxIcon />
@@ -89,24 +116,55 @@ export default function Sidebar() {
             </Box>
           ) : lists && lists.length > 0 ? (
             lists.map((list: ListType) => (
-              <ListItem key={list.id} disablePadding>
-                <ListItemButton
-                  selected={selectedListId === list.id}
-                  onClick={() => handleListClick(list.id)}
-                >
-                  <ListItemIcon>
-                    <ListIcon sx={{ color: list.color }} />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={list.name}
-                    secondary={list.description}
-                    secondaryTypographyProps={{
-                      noWrap: true,
-                      sx: { fontSize: '0.75rem' },
+              <Droppable key={list.id} droppableId={`sidebar-list-${list.id}`}>
+                {(provided, snapshot) => (
+                  <div 
+                    ref={provided.innerRef} 
+                    {...provided.droppableProps}
+                    style={{
+                      backgroundColor: snapshot.isDraggingOver ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                      transition: 'background-color 0.2s',
                     }}
-                  />
-                </ListItemButton>
-              </ListItem>
+                  >
+                    <ListItem 
+                      disablePadding
+                      secondaryAction={
+                        selectedListId === list.id ? (
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedListForMenu(list);
+                              setMenuAnchor(e.currentTarget);
+                            }}
+                          >
+                            <MoreVert fontSize="small" />
+                          </IconButton>
+                        ) : null
+                      }
+                    >
+                      <ListItemButton
+                        selected={selectedListId === list.id}
+                        onClick={() => handleListClick(list.id)}
+                      >
+                        <ListItemIcon>
+                          <ListIcon sx={{ color: list.color }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={list.name}
+                          secondary={list.description}
+                          secondaryTypographyProps={{
+                            noWrap: true,
+                            sx: { fontSize: '0.75rem' },
+                          }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                    {provided.placeholder}
+                  </div>
+                )}
+              </Droppable>
             ))
           ) : (
             <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
@@ -122,6 +180,50 @@ export default function Sidebar() {
         open={createDialogOpen}
         onClose={() => setCreateDialogOpen(false)}
       />
+
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={() => setMenuAnchor(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            setEditDialogOpen(true);
+          }}
+        >
+          <Edit sx={{ mr: 1 }} fontSize="small" />
+          Edit
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            setDeleteDialogOpen(true);
+          }}
+        >
+          <Delete sx={{ mr: 1 }} fontSize="small" />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      {selectedListForMenu && (
+        <>
+          <EditListDialog
+            open={editDialogOpen}
+            onClose={() => setEditDialogOpen(false)}
+            list={selectedListForMenu}
+          />
+          <ConfirmDialog
+            open={deleteDialogOpen}
+            title="Delete List"
+            message={`Are you sure you want to delete "${selectedListForMenu.name}"? This will also delete all items in this list.`}
+            confirmText="Delete"
+            onConfirm={() => deleteMutation.mutate(selectedListForMenu)}
+            onCancel={() => setDeleteDialogOpen(false)}
+            isLoading={deleteMutation.isPending}
+          />
+        </>
+      )}
     </>
   );
 }

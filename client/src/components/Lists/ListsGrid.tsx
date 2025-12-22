@@ -7,20 +7,69 @@ import {
   IconButton,
   Box,
   CircularProgress,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   MoreVert as MoreVertIcon,
   List as ListIcon,
+  Edit,
+  Delete,
 } from '@mui/icons-material';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { listsApi } from '../../services/api/lists';
+import EditListDialog from './EditListDialog';
+import ConfirmDialog from '../Common/ConfirmDialog';
 import type { List } from '../../types';
 
 export default function ListsGrid() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedList, setSelectedList] = useState<List | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   const { data: lists, isLoading, error } = useQuery({
     queryKey: ['lists'],
     queryFn: listsApi.getAll,
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (list: List) => listsApi.delete(list.id, list.version),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lists'] });
+      setDeleteDialogOpen(false);
+    },
+  });
+
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>, list: List) => {
+    e.stopPropagation();
+    setSelectedList(list);
+    setMenuAnchor(e.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setMenuAnchor(null);
+  };
+
+  const handleEdit = () => {
+    handleMenuClose();
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = () => {
+    handleMenuClose();
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = () => {
+    if (selectedList) {
+      deleteMutation.mutate(selectedList);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -59,6 +108,7 @@ export default function ListsGrid() {
       {lists.map((list: List) => (
         <Grid item xs={12} sm={6} md={4} key={list.id}>
           <Card
+            onClick={() => navigate(`/lists/${list.id}`)}
             sx={{
               height: '100%',
               display: 'flex',
@@ -106,13 +156,50 @@ export default function ListsGrid() {
               </Box>
             </CardContent>
             <CardActions sx={{ justifyContent: 'flex-end' }}>
-              <IconButton size="small">
+              <IconButton 
+                size="small" 
+                onClick={(e) => handleMenuOpen(e, list)}
+              >
                 <MoreVertIcon />
               </IconButton>
             </CardActions>
           </Card>
         </Grid>
       ))}
+
+      <Menu
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
+        onClose={handleMenuClose}
+      >
+        <MenuItem onClick={handleEdit}>
+          <Edit sx={{ mr: 1 }} fontSize="small" />
+          Edit
+        </MenuItem>
+        <MenuItem onClick={handleDelete}>
+          <Delete sx={{ mr: 1 }} fontSize="small" />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      {selectedList && (
+        <>
+          <EditListDialog
+            open={editDialogOpen}
+            onClose={() => setEditDialogOpen(false)}
+            list={selectedList}
+          />
+          <ConfirmDialog
+            open={deleteDialogOpen}
+            title="Delete List"
+            message={`Are you sure you want to delete "${selectedList.name}"? This will also delete all items in this list.`}
+            confirmText="Delete"
+            onConfirm={handleDeleteConfirm}
+            onCancel={() => setDeleteDialogOpen(false)}
+            isLoading={deleteMutation.isPending}
+          />
+        </>
+      )}
     </Grid>
   );
 }
