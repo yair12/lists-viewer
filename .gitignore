@@ -11,3 +11,10 @@ dist/
 vendor/
 *.pem
 k8s-images/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
