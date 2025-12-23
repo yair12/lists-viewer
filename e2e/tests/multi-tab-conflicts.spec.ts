@@ -27,16 +27,20 @@ test.describe('Multi-Tab Conflict Resolution', () => {
       await page.waitForLoadState('networkidle');
     }
 
-    // Tab 1: Edit item by clicking row
-    await page1.locator('text=Shared Item').first().click();
-    await page1.fill('input[name="name"]', 'Updated in Tab 1');
-    await page1.click('button:has-text("Save")');
+    // Tab 1: Edit item via menu button
+    await page1.getByTestId('item-menu-button').first().click();
+    await page1.waitForTimeout(300);
+    await page1.getByRole('menuitem', { name: /edit/i }).click();
+    await page1.getByTestId('edit-item-name-input').fill('Updated in Tab 1');
+    await page1.getByTestId('edit-item-submit').click();
     await page1.waitForTimeout(1000);
 
     // Tab 2: Try to edit same item (will use stale version)
-    await page2.locator('text=Shared Item').first().click();
-    await page2.fill('input[name="name"]', 'Updated in Tab 2');
-    await page2.click('button:has-text("Save")');
+    await page2.getByTestId('item-menu-button').first().click();
+    await page2.waitForTimeout(300);
+    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page2.getByTestId('edit-item-name-input').fill('Updated in Tab 2');
+    await page2.getByTestId('edit-item-submit').click();
     
     // Without conflict UI, the save will fail or be rejected
     // Verify server has Tab 1's update (first one wins)
@@ -74,17 +78,21 @@ test.describe('Multi-Tab Conflict Resolution', () => {
     }
 
     // Tab 1: Update item first
-    await page1.locator('text=Original').first().click();
-    await page1.fill('input[name="name"]', 'First Update');
-    await page1.fill('input[name="quantity"]', '10');
-    await page1.click('button:has-text("Save")');
+    await page1.getByTestId('item-menu-button').first().click();
+    await page1.waitForTimeout(300);
+    await page1.getByRole('menuitem', { name: /edit/i }).click();
+    await page1.getByTestId('edit-item-name-input').fill('First Update');
+    await page1.getByTestId('edit-item-quantity-input').fill('10');
+    await page1.getByTestId('edit-item-submit').click();
     await page1.waitForTimeout(1000);
 
     // Tab 2: Try to update same item with stale version (will fail)
-    await page2.locator('text=Original').first().click();
-    await page2.fill('input[name="name"]', 'Second Update');
-    await page2.fill('input[name="quantity"]', '5');
-    await page2.click('button:has-text("Save")');
+    await page2.getByTestId('item-menu-button').first().click();
+    await page2.waitForTimeout(300);
+    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page2.getByTestId('edit-item-name-input').fill('Second Update');
+    await page2.getByTestId('edit-item-quantity-input').fill('5');
+    await page2.getByTestId('edit-item-submit').click();
     await page2.waitForTimeout(1000);
 
     // Refresh Tab 2 to see server version
@@ -122,27 +130,43 @@ test.describe('Multi-Tab Conflict Resolution', () => {
     }
 
     // Tab 1: Update first
-    await page1.locator('text=Original').first().click();
-    await page1.fill('input[name="name"]', 'First Update');
-    await page1.click('button:has-text("Save")');
-    await page1.waitForTimeout(1000);
+    await page1.getByTestId('item-menu-button').first().click();
+    await page1.waitForTimeout(300);
+    await page1.getByRole('menuitem', { name: /edit/i }).click();
+    await page1.getByTestId('edit-item-name-input').fill('First Update');
+    await page1.getByTestId('edit-item-submit').click();
+    
+    // Poll for first update to sync
+    let serverItems;
+    let serverItem;
+    for (let i = 0; i < 10; i++) {
+      await page1.waitForTimeout(1000);
+      serverItems = await apiHelper.getItems(testUser.id, list.id);
+      serverItem = serverItems.find((i) => i.id === item.id);
+      if (serverItem?.name === 'First Update') break;
+    }
 
     // Verify first update succeeded
-    let serverItems = await apiHelper.getItems(testUser.id, list.id);
-    let serverItem = serverItems.find((i) => i.id === item.id);
     expect(serverItem?.name).toBe('First Update');
 
     // Tab 2: Refresh and make another update (will succeed with fresh version)
     await page2.reload();
     await page2.waitForLoadState('networkidle');
-    await page2.locator('text=First Update').first().click();
-    await page2.fill('input[name="name"]', 'Second Update After Refresh');
-    await page2.click('button:has-text("Save")');
-    await page2.waitForTimeout(1000);
+    await page2.getByTestId('item-menu-button').first().click();
+    await page2.waitForTimeout(300);
+    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page2.getByTestId('edit-item-name-input').fill('Second Update After Refresh');
+    await page2.getByTestId('edit-item-submit').click();
+    
+    // Poll for sync to complete
+    for (let i = 0; i < 10; i++) {
+      await page2.waitForTimeout(1000);
+      serverItems = await apiHelper.getItems(testUser.id, list.id);
+      serverItem = serverItems.find((i) => i.id === item.id);
+      if (serverItem?.name === 'Second Update After Refresh') break;
+    }
 
     // Verify second update succeeded
-    serverItems = await apiHelper.getItems(testUser.id, list.id);
-    serverItem = serverItems.find((i) => i.id === item.id);
     expect(serverItem?.name).toBe('Second Update After Refresh');
 
     await page1.close();
@@ -170,16 +194,10 @@ test.describe('Multi-Tab Conflict Resolution', () => {
     }
 
     // Tab 1: Delete item using menu
-    const itemText1 = page1.locator('text=Will Be Deleted').first();
-    await itemText1.click(); // Opens edit
-    await page1.keyboard.press('Escape'); // Close
-    await page1.waitForTimeout(200);
-    
-    const row1 = page1.locator('text=Will Be Deleted').locator('..');
-    await row1.locator('button').last().click();
+    await page1.getByTestId('item-menu-button').first().click();
     await page1.waitForTimeout(300);
     await page1.getByRole('menuitem', { name: /delete/i }).click();
-    await page1.getByRole('button', { name: 'Delete' }).click();
+    await page1.getByTestId('confirm-dialog-confirm').click();
     await page1.waitForTimeout(1000);
 
     // Refresh Tab 2 to see the deletion (no cross-tab sync)
@@ -269,18 +287,24 @@ test.describe('Multi-Tab Conflict Resolution', () => {
     }
 
     // Tab 1: Create item
-    await page1.click('button:has-text("Add Item")');
-    await page1.fill('input[name="name"]', 'Tab 1 Item');
-    await page1.click('button:has-text("Add")');
+    await page1.getByTestId('add-item-button').click();
+    await page1.waitForTimeout(500); // Wait for dialog to open
+    await page1.getByTestId('item-name-input').fill('Tab 1 Item');
+    await page1.getByRole('button', { name: 'Add' }).click();
     await page1.waitForTimeout(1000);
 
     // Tab 2: Should NOT automatically see the new item (no cross-tab sync)
     const tab2HasItem = await page2.locator('text=Tab 1 Item').isVisible().catch(() => false);
     expect(tab2HasItem).toBe(false);
 
-    // Tab 2: Must refresh to see updates
-    await page2.reload();
-    await page2.waitForLoadState('networkidle');
+    // Tab 2: Must refresh to see updates (poll for sync to complete)
+    for (let i = 0; i < 5; i++) {
+      await page2.reload();
+      await page2.waitForLoadState('networkidle');
+      const isVisible = await page2.locator('text=Tab 1 Item').isVisible().catch(() => false);
+      if (isVisible) break;
+      await page2.waitForTimeout(1000);
+    }
     await expect(page2.locator('text=Tab 1 Item')).toBeVisible();
 
     await page1.close();
@@ -312,15 +336,19 @@ test.describe('Multi-Tab Conflict Resolution', () => {
     }
 
     // Tab 1: Edit item 2
-    await page1.locator('text=Item 2').first().click();
-    await page1.fill('input[name="name"]', 'Updated by Tab 1');
-    await page1.click('button:has-text("Save")');
+    await page1.getByTestId('item-menu-button').nth(1).click();
+    await page1.waitForTimeout(300);
+    await page1.getByRole('menuitem', { name: /edit/i }).click();
+    await page1.getByTestId('edit-item-name-input').fill('Updated by Tab 1');
+    await page1.getByTestId('edit-item-submit').click();
     await page1.waitForTimeout(1000);
 
     // Tab 2: Try to edit same item with stale version
-    await page2.locator('text=Item 2').first().click();
-    await page2.fill('input[name="name"]', 'Updated by Tab 2');
-    await page2.click('button:has-text("Save")');
+    await page2.getByTestId('item-menu-button').nth(1).click();
+    await page2.waitForTimeout(300);
+    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page2.getByTestId('edit-item-name-input').fill('Updated by Tab 2');
+    await page2.getByTestId('edit-item-submit').click();
     await page2.waitForTimeout(1000);
 
     // Verify Tab 1's update won (first write)

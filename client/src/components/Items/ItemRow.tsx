@@ -124,6 +124,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
   return (
     <Box
       onClick={handleRowClick}
+      data-item-id={item.id}
       sx={{
         display: 'flex',
         alignItems: 'center',
