@@ -51,7 +51,8 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
   // Get icon URL for the item's creator
   const userIcon = icons.find(icon => icon.id === item.userIconId);
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     updateMutation.mutate({
       listId,
       itemId: item.id,
@@ -143,6 +144,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
         <Checkbox
           checked={item.completed}
           onChange={handleToggle}
+          onClick={(e) => e.stopPropagation()}
           disabled={updateMutation.isPending}
           sx={{
             '& .MuiSvgIcon-root': { 
@@ -213,7 +215,10 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
 
       <IconButton 
         size="small" 
-        onClick={(e) => setMenuAnchor(e.currentTarget)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setMenuAnchor(e.currentTarget);
+        }}
       >
         <MoreVertIcon fontSize="small" />
       </IconButton>

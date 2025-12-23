@@ -1,6 +1,6 @@
 import { createTheme, ThemeOptions } from '@mui/material/styles';
 
-// Dark theme configuration for Lists Viewer
+// Dark theme configuration for Snap
 export const darkTheme = createTheme({
   palette: {
     mode: 'dark',

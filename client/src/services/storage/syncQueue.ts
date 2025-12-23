@@ -206,3 +206,31 @@ export const hasResourcePendingOps = async (
     (item) => item.resourceType === resourceType && item.resourceId === resourceId
   );
 };
+
+/**
+ * Check if a resource has a pending DELETE operation
+ */
+export const hasResourcePendingDelete = async (
+  resourceType: ResourceType,
+  resourceId: string
+): Promise<boolean> => {
+  const pendingItems = await getPendingSyncItems();
+  return pendingItems.some(
+    (item) => 
+      item.resourceType === resourceType && 
+      item.resourceId === resourceId && 
+      item.operationType === 'DELETE'
+  );
+};
+
+/**
+ * Get all resources with pending DELETE operations
+ */
+export const getResourcesWithPendingDelete = async (
+  resourceType: ResourceType
+): Promise<string[]> => {
+  const pendingItems = await getPendingSyncItems();
+  return pendingItems
+    .filter((item) => item.resourceType === resourceType && item.operationType === 'DELETE')
+    .map((item) => item.resourceId);
+};

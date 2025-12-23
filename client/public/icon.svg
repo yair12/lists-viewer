@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#16213e;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradient)"/>
+  
+  <!-- Motion blur effect - many thin layers spread out -->
+  <path d="M 60 260 L 140 350 L 320 150" stroke="#4caf50" stroke-width="35" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.05"/>
+  <path d="M 65 260 L 145 350 L 325 150" stroke="#4caf50" stroke-width="36" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.06"/>
+  <path d="M 70 260 L 150 350 L 330 150" stroke="#4caf50" stroke-width="37" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.07"/>
+  <path d="M 75 260 L 155 350 L 335 150" stroke="#4caf50" stroke-width="38" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.08"/>
+  <path d="M 80 260 L 160 350 L 340 150" stroke="#4caf50" stroke-width="39" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.09"/>
+  <path d="M 85 260 L 165 350 L 345 150" stroke="#4caf50" stroke-width="40" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.11"/>
+  <path d="M 90 260 L 170 350 L 350 150" stroke="#4caf50" stroke-width="42" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.13"/>
+  <path d="M 95 260 L 175 350 L 355 150" stroke="#4caf50" stroke-width="44" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.15"/>
+  <path d="M 100 260 L 180 350 L 360 150" stroke="#4caf50" stroke-width="46" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.18"/>
+  <path d="M 105 260 L 185 350 L 365 150" stroke="#4caf50" stroke-width="48" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.21"/>
+  <path d="M 110 260 L 190 350 L 370 150" stroke="#4caf50" stroke-width="50" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.25"/>
+  <path d="M 115 260 L 195 350 L 375 150" stroke="#4caf50" stroke-width="52" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.30"/>
+  <path d="M 120 260 L 200 350 L 380 150" stroke="#4caf50" stroke-width="54" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+  <path d="M 125 260 L 205 350 L 385 150" stroke="#4caf50" stroke-width="56" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.42"/>
+  <path d="M 130 260 L 210 350 L 390 150" stroke="#4caf50" stroke-width="58" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.50"/>
+  <path d="M 135 260 L 215 350 L 395 150" stroke="#4caf50" stroke-width="60" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.65"/>
+  
+  <!-- Main sharp checkmark -->
+  <path d="M 145 260 L 225 350 L 405 150" stroke="#4caf50" stroke-width="62" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="1"/>
+</svg>

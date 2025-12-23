@@ -44,9 +44,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <MenuIcon />
         </IconButton>
         
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Lists Viewer
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 1 }}>
+          <img src="/icon.svg" alt="Snap" style={{ width: 32, height: 32 }} />
+          <Typography variant="h6" component="div">
+            Snap
+          </Typography>
+        </Box>
 
         {user && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

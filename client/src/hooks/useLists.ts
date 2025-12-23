@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listsApi } from '../services/api/lists';
 import { queryKeys } from '../services/api/queryClient';
 import { isNetworkError } from '../services/api/client';
-import { addToSyncQueue } from '../services/storage/syncQueue';
+import { addToSyncQueue, getResourcesWithPendingDelete } from '../services/storage/syncQueue';
 import { cacheList, cacheLists, getCachedLists, removeCachedList } from '../services/storage/cacheManager';
 import type { List, CreateListRequest, UpdateListRequest } from '../types';
 
@@ -21,30 +21,31 @@ export const useLists = () => {
         const lists = await listsApi.getAll();
         // Cache the lists in IndexedDB
         await cacheLists(lists);
-        return lists;
+        
+        // Filter out lists with pending DELETE operations
+        const pendingDeletes = await getResourcesWithPendingDelete('LIST');
+        const filteredLists = lists.filter(list => !pendingDeletes.includes(list.id));
+        return filteredLists;
       } catch (error) {
         // If network error, return cached data (don't throw)
         if (isNetworkError(error)) {
           console.log('[useLists] Network error, returning cached data');
           const cached = await getCachedLists();
-          return cached; // Return cached data, don't throw
+          // Filter out lists with pending DELETE operations
+          const pendingDeletes = await getResourcesWithPendingDelete('LIST');
+          const filteredLists = cached.filter(list => !pendingDeletes.includes(list.id));
+          return filteredLists;
         }
         // For other errors, still return cache to prevent UI blocking
         console.error('[useLists] Error fetching lists, falling back to cache:', error);
         const cached = await getCachedLists();
-        return cached;
+        // Filter out lists with pending DELETE operations
+        const pendingDeletes = await getResourcesWithPendingDelete('LIST');
+        const filteredLists = cached.filter(list => !pendingDeletes.includes(list.id));
+        return filteredLists;
       }
     },
-    // Load from cache immediately while fetching
-    placeholderData: () => {
-      getCachedLists().then(cached => {
-        if (cached.length > 0) {
-          console.log('[useLists] Loaded', cached.length, 'lists from cache');
-        }
-      });
-      return [];
-    },
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 0, // Always consider data stale to ensure fresh fetch on mount
     refetchInterval: () => {
       // Don't poll if sync is in progress or if mutations are active
       if ((window as any).__syncInProgress || (window as any).__mutationInProgress) {
@@ -53,6 +54,8 @@ export const useLists = () => {
       return 10000; // Poll every 10 seconds otherwise
     },
     refetchIntervalInBackground: false, // Don't poll when tab is not visible
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
     retry: false, // Don't retry failed requests
   });
 };
@@ -88,6 +91,9 @@ export const useList = (listId: string | null) => {
       }
     },
     enabled: !!listId,
+    staleTime: 0, // Always consider data stale
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
   });
 };
 
@@ -213,30 +219,29 @@ export const useDeleteList = () => {
     mutationFn: async ({ listId, version }: { listId: string; version: number }) => {
       try {
         await listsApi.delete(listId, version);
-        // Remove from cache immediately
+        // Only remove from cache after successful API call
         await removeCachedList(listId);
-        console.log('[useDeleteList] ✅ Deleted list and removed from cache:', listId);
+        console.log('[useDeleteList] ✅ Deleted from server and removed from cache:', listId);
+        return { success: true, listId };
       } catch (error) {
-        // If network error, add to sync queue
+        // If network error, add to sync queue but DON'T remove from cache yet
         if (isNetworkError(error)) {
-          console.log('[useDeleteList] Network error, adding to sync queue');
-          
-          // Optimistically remove from cache
-          await removeCachedList(listId);
+          console.log('[useDeleteList] Network error, adding to sync queue (keeping in cache)');
           await addToSyncQueue('DELETE', 'LIST', listId, { version }, version);
-          
-          return;
+          return { success: false, listId };
         }
         throw error;
       }
     },
-    onSuccess: (_, variables) => {
+    onSuccess: async (_, variables) => {
       // Remove from cache and invalidate queries immediately
       queryClient.removeQueries({ queryKey: queryKeys.lists.detail(variables.listId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
-      // Also clear the entire cache to force refetch
-      queryClient.refetchQueries({ queryKey: queryKeys.lists.all });
-      console.log('[useDeleteList] ✅ Queries invalidated and refetched');
+      // Also remove all items for this list
+      queryClient.removeQueries({ queryKey: queryKeys.items.byList(variables.listId) });
+      // Invalidate and refetch to ensure fresh data
+      await queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
+      await queryClient.refetchQueries({ queryKey: queryKeys.lists.all });
+      console.log('[useDeleteList] ✅ Queries removed, invalidated and refetched');
     },
   });
 };

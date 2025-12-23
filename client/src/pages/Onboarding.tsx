@@ -105,7 +105,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           {step === 'username' ? (
             <>
               <Typography variant="h4" gutterBottom align="center">
-                Welcome to Lists Viewer
+                Welcome to Snap
               </Typography>
               <Typography variant="body1" color="text.secondary" paragraph align="center">
                 Let's get started! What should we call you?

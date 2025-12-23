@@ -146,9 +146,6 @@ export default function ListsGrid() {
               )}
               <Box sx={{ mt: 2, display: 'flex', gap: 2 }}>
                 <Typography variant="caption" color="text.secondary">
-                  {list.itemCount || 0} items
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
                   Updated {new Date(list.updatedAt).toLocaleDateString()}
                 </Typography>
               </Box>

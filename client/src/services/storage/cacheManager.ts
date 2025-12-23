@@ -4,7 +4,7 @@
  */
 
 import { List, Item } from '../../types';
-import { STORES, putItem, putItems, getItem, getAllItems, getItemsByIndex, deleteItem } from './indexedDB';
+import { STORES, putItem, putItems, getItem, getAllItems, getItemsByIndex, deleteItem, clearStore } from './indexedDB';
 
 /**
  * Cache a single list
@@ -15,8 +15,10 @@ export const cacheList = async (list: List): Promise<void> => {
 
 /**
  * Cache multiple lists
+ * Clears existing cache first to ensure deleted lists are removed
  */
 export const cacheLists = async (lists: List[]): Promise<void> => {
+  await clearStore(STORES.LISTS);
   await putItems(STORES.LISTS, lists);
 };
 

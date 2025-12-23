@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { itemsApi } from '../services/api/items';
 import { queryKeys } from '../services/api/queryClient';
 import { isNetworkError } from '../services/api/client';
-import { addToSyncQueue } from '../services/storage/syncQueue';
+import { addToSyncQueue, getResourcesWithPendingDelete } from '../services/storage/syncQueue';
 import { 
   cacheItem, 
   cacheItems, 
@@ -36,22 +36,32 @@ export const useItems = (listId: string | null, includeArchived = false) => {
         const items = await itemsApi.getByListId(listId, includeArchived);
         // Cache the items
         await cacheItems(items);
-        return items;
+        
+        // Filter out items with pending DELETE operations
+        const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
+        const filteredItems = items.filter(item => !pendingDeletes.includes(item.id));
+        return filteredItems;
       } catch (error) {
         // If network error, return cached data (don't throw)
         if (isNetworkError(error)) {
           console.log('[useItems] Network error, returning cached data');
           const cached = await getCachedItemsByList(listId);
-          return cached; // Return cached data, don't throw
+          // Filter out items with pending DELETE operations
+          const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
+          const filteredItems = cached.filter(item => !pendingDeletes.includes(item.id));
+          return filteredItems;
         }
         // For other errors, still return cache to prevent UI blocking
         console.error('[useItems] Error fetching items, falling back to cache:', error);
         const cached = await getCachedItemsByList(listId);
-        return cached;
+        // Filter out items with pending DELETE operations
+        const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
+        const filteredItems = cached.filter(item => !pendingDeletes.includes(item.id));
+        return filteredItems;
       }
     },
     enabled: !!listId,
-    staleTime: 30000, // Consider data fresh for 30 seconds
+    staleTime: 0, // Always consider data stale to ensure fresh fetch
     refetchInterval: () => {
       // Don't poll if sync is in progress or if mutations are active
       if ((window as any).__syncInProgress || (window as any).__mutationInProgress) {
@@ -60,6 +70,8 @@ export const useItems = (listId: string | null, includeArchived = false) => {
       return 10000; // Poll every 10 seconds otherwise
     },
     refetchIntervalInBackground: false, // Don't poll when tab is not visible
+    refetchOnMount: true, // Always refetch on mount
+    refetchOnWindowFocus: true, // Refetch when window gains focus
     retry: false, // Don't retry failed requests
   });
 };
@@ -287,14 +299,14 @@ export const useDeleteItem = () => {
 
       try {
         await itemsApi.delete(listId, itemId, version);
+        // Only remove from cache after successful API call
         await removeCachedItem(itemId);
+        console.log('[useDeleteItem] ✅ Deleted from server and removed from cache:', itemId);
       } catch (error) {
         if (isNetworkError(error)) {
-          console.log('[useDeleteItem] Network error, adding to sync queue');
-
-          await removeCachedItem(itemId);
+          console.log('[useDeleteItem] Network error, adding to sync queue (keeping in cache)');
+          // Don't remove from cache - let sync manager handle it after successful sync
           await addToSyncQueue('DELETE', 'ITEM', itemId, { version }, version, listId);
-
           return;
         }
         throw error;
