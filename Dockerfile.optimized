@@ -1,0 +1,63 @@
+# Optimized Dockerfile with BuildKit cache mounts
+# Use with: docker buildx build --platform linux/arm64
+
+# Stage 1: Build frontend with cache mounts
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app/client
+
+# Copy package files
+COPY client/package*.json ./
+
+# Install with cache mount (much faster on rebuilds)
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --no-audit --progress=false
+
+# Copy source
+COPY client/ ./
+
+# Build with cache
+RUN --mount=type=cache,target=/app/client/.vite \
+    npm run build
+
+# Stage 2: Build backend with cache mounts
+FROM golang:1.24-alpine AS backend-builder
+
+WORKDIR /app
+
+# Copy go mod files
+COPY server/go.mod server/go.sum ./
+
+# Download dependencies with cache mount
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Copy source
+COPY server/ ./
+
+# Build with cache and optimizations
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux go build \
+    -a -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o server ./cmd/server
+
+# Stage 3: Runtime (minimal)
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates wget && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /root/
+
+# Copy binaries
+COPY --from=backend-builder /app/server .
+COPY --from=frontend-builder /app/client/dist ./public
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+EXPOSE 8080
+
+CMD ["./server"]

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: lists-viewer
+description: A Helm chart for Lists Viewer - Progressive Web App for managing lists
+type: application
+version: 0.1.0
+appVersion: "0.0.1"
+keywords:
+  - todo
+  - checklist
+  - lists
+  - pwa
+maintainers:
+  - name: Lists Viewer Team
+    email: team@lists-viewer.dev
+home: https://github.com/yair12/lists-viewer
+sources:
+  - https://github.com/yair12/lists-viewer

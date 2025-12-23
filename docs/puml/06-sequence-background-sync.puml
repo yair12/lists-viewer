@@ -1,0 +1,41 @@
+@startuml Background Sync Flow
+
+title Pattern 3: Background Sync (Recovery)
+
+participant "Network Status" as NS
+participant "Sync Manager" as SM
+participant "Sync Queue" as Queue
+participant IndexedDB
+participant "API Client" as API
+participant Backend
+participant "Cache Manager" as Cache
+participant "React Query" as RQ
+participant Component
+
+NS -> NS: Detect Online
+NS -> SM: Trigger sync
+
+SM -> Queue: getPendingSyncItems()
+Queue -> IndexedDB: getItemsByIndex(PENDING)
+IndexedDB --> Queue: [items]
+Queue --> SM: Pending items
+
+loop For Each Item
+    SM -> API: Execute operation
+    API -> Backend: HTTP Request
+    Backend --> API: Response (real ID)
+    
+    SM -> Cache: Update cache
+    Cache -> IndexedDB: Replace temp with real
+    IndexedDB --> Cache: ✓
+    
+    SM -> Queue: Remove from queue
+    Queue -> IndexedDB: deleteItem(syncQueue)
+    IndexedDB --> Queue: ✓
+end
+
+SM -> RQ: Notify hooks
+RQ -> Component: Invalidate queries
+Component -> Component: Re-render with\nsynced data
+
+@enduml
