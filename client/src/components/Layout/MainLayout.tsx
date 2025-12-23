@@ -2,6 +2,8 @@ import { Box } from '@mui/material';
 import { ReactNode, useState } from 'react';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import OfflineIndicator from '../Common/OfflineIndicator';
+import SyncDialogs from '../Common/SyncDialogs';
 
 interface MainLayoutProps {
   children: ReactNode;
@@ -31,6 +33,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
           {children}
         </Box>
       </Box>
+      <OfflineIndicator />
+      <SyncDialogs />
     </Box>
   );
 }

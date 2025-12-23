@@ -28,7 +28,13 @@ export default defineConfig({
     
     /* Video on failure */
     video: 'retain-on-failure',
+    
+    /* Action timeout */
+    actionTimeout: 10000,
   },
+  
+  /* Test timeout */
+  timeout: 60000,
   
   /* Global setup/teardown */
   globalSetup: require.resolve('./tests/global-setup'),

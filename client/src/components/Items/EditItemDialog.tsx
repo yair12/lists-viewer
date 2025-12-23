@@ -75,6 +75,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
               required
               autoFocus
               disabled={updateMutation.isPending}
+              inputProps={{ 'data-testid': 'edit-item-name-input' }}
             />
 
             {item.type === 'list' && (
@@ -96,7 +97,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   type="number"
-                  inputProps={{ min: 0, step: 0.01 }}
+                  inputProps={{ min: 0, step: 0.01, 'data-testid': 'edit-item-quantity-input' }}
                   sx={{ flex: 1 }}
                   disabled={updateMutation.isPending}
                 />
@@ -126,6 +127,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
             type="submit"
             variant="contained"
             disabled={updateMutation.isPending || !name.trim()}
+            data-testid="edit-item-submit"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save'}
           </Button>

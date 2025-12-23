@@ -148,6 +148,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
           onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
           disabled={updateMutation.isPending}
+          data-testid="item-checkbox"
           sx={{
             '& .MuiSvgIcon-root': { 
               fontSize: { xs: 32, sm: 28 } // Larger on mobile
@@ -221,6 +222,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
           e.stopPropagation();
           setMenuAnchor(e.currentTarget);
         }}
+        data-testid="item-menu-button"
       >
         <MoreVertIcon fontSize="small" />
       </IconButton>

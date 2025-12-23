@@ -43,6 +43,7 @@ export default function ConfirmDialog({
           color="error"
           variant="contained"
           disabled={isLoading}
+          data-testid="confirm-dialog-confirm"
         >
           {confirmText}
         </Button>

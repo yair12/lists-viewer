@@ -13,6 +13,7 @@ export interface List {
   itemCount: number;
   completedItemCount: number;
   archived?: boolean;
+  pending?: boolean; // Indicates item is pending sync
 }
 
 export interface Item {
@@ -31,6 +32,7 @@ export interface Item {
   quantityType?: string;
   userIconId: string;
   archived?: boolean;
+  pending?: boolean; // Indicates item is pending sync
   
   // For nested lists (type="list")
   description?: string;
@@ -80,6 +82,7 @@ export interface CreateItemRequest {
   quantityType?: string;
   userIconId?: string;
   description?: string; // For nested lists
+  order?: number; // For specifying initial order
 }
 
 export interface UpdateItemRequest {

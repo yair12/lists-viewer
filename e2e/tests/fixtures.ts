@@ -85,7 +85,7 @@ class ApiHelper {
       },
       body: JSON.stringify({
         name: itemData.name || 'Test Item',
-        type: 'regular',
+        type: 'item',
         quantity: itemData.quantity,
         quantityType: itemData.quantityType,
       }),

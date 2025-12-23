@@ -12,7 +12,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { CheckBox, List as ListIcon } from '@mui/icons-material';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { QUANTITY_TYPES, USER_STORAGE_KEY } from '../../utils/constants';
 import { useCreateItem } from '../../hooks/useItems';
 import type { CreateItemRequest } from '../../types';
@@ -30,10 +30,20 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
   const [quantity, setQuantity] = useState('');
   const [quantityType, setQuantityType] = useState<string>(QUANTITY_TYPES[0]);
 
-  const userStr = localStorage.getItem(USER_STORAGE_KEY);
-  const user = userStr ? JSON.parse(userStr) : null;
+  // Memoize user to prevent re-reads on every render
+  const user = useMemo(() => {
+    const userStr = localStorage.getItem(USER_STORAGE_KEY);
+    return userStr ? JSON.parse(userStr) : null;
+  }, []);
 
   const createMutation = useCreateItem();
+
+  // Close dialog when mutation succeeds
+  useEffect(() => {
+    if (createMutation.isSuccess) {
+      handleClose();
+    }
+  }, [createMutation.isSuccess]);
 
   const handleClose = () => {
     setType('item');
@@ -57,14 +67,7 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
       ...(user && { userIconId: user.iconId }),
     };
 
-    createMutation.mutate(
-      { listId, data: payload },
-      {
-        onSettled: () => {
-          handleClose();
-        },
-      }
-    );
+    createMutation.mutate({ listId, data: payload });
   };
 
   return (
@@ -97,6 +100,7 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
               required
               autoFocus
               disabled={createMutation.isPending}
+              inputProps={{ 'data-testid': 'item-name-input' }}
             />
 
             {type === 'list' && (
@@ -118,7 +122,7 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   type="number"
-                  inputProps={{ min: 0, step: 0.01 }}
+                  inputProps={{ min: 0, step: 0.01, 'data-testid': 'item-quantity-input' }}
                   sx={{ flex: 1 }}
                   disabled={createMutation.isPending}
                 />

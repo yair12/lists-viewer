@@ -2,6 +2,7 @@
  * Custom hooks for items data fetching and mutations
  */
 
+import { v4 as uuidv4 } from 'uuid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { itemsApi } from '../services/api/items';
 import { queryKeys } from '../services/api/queryClient';
@@ -13,6 +14,7 @@ import {
   getCachedItemsByList, 
   removeCachedItem
 } from '../services/storage/cacheManager';
+import { STORES, putItem } from '../services/storage/indexedDB';
 import type { 
   Item, 
   CreateItemRequest, 
@@ -25,6 +27,8 @@ import type {
  * Hook to fetch items for a list
  */
 export const useItems = (listId: string | null, includeArchived = false) => {
+  const queryClient = useQueryClient();
+  
   return useQuery({
     queryKey: listId ? queryKeys.items.byList(listId) : ['items', 'null'],
     queryFn: async () => {
@@ -49,7 +53,13 @@ export const useItems = (listId: string | null, includeArchived = false) => {
           // Filter out items with pending DELETE operations
           const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
           const filteredItems = cached.filter(item => !pendingDeletes.includes(item.id));
-          return filteredItems;
+          
+          // Merge with existing React Query cache to preserve optimistic updates
+          const existingCache = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+          const cachedIds = new Set(filteredItems.map((i: Item) => i.id));
+          const optimisticItems = existingCache.filter((i: Item) => !cachedIds.has(i.id) && i.pending);
+          
+          return [...filteredItems, ...optimisticItems];
         }
         // For other errors, still return cache to prevent UI blocking
         console.error('[useItems] Error fetching items, falling back to cache:', error);
@@ -57,7 +67,13 @@ export const useItems = (listId: string | null, includeArchived = false) => {
         // Filter out items with pending DELETE operations
         const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
         const filteredItems = cached.filter(item => !pendingDeletes.includes(item.id));
-        return filteredItems;
+        
+        // Merge with existing cache to preserve optimistic updates
+        const existingCache = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+        const cachedIds = new Set(filteredItems.map((i: Item) => i.id));
+        const optimisticItems = existingCache.filter((i: Item) => !cachedIds.has(i.id) && i.pending);
+        
+        return [...filteredItems, ...optimisticItems];
       }
     },
     enabled: !!listId,
@@ -70,8 +86,8 @@ export const useItems = (listId: string | null, includeArchived = false) => {
       return 10000; // Poll every 10 seconds otherwise
     },
     refetchIntervalInBackground: false, // Don't poll when tab is not visible
-    refetchOnMount: true, // Always refetch on mount
-    refetchOnWindowFocus: true, // Refetch when window gains focus
+    refetchOnMount: 'always', // Always refetch on mount
+    refetchOnWindowFocus: false, // Don't refetch on focus to preserve optimistic updates
     retry: false, // Don't retry failed requests
   });
 };
@@ -118,53 +134,41 @@ export const useCreateItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async ({ listId, data }: { listId: string; data: CreateItemRequest }) => {
-      try {
-        console.log('[useCreateItem] 🌐 Making API call...');
-        const newItem = await itemsApi.create(listId, data);
-        await cacheItem(newItem);
-        console.log('[useCreateItem] ✅ Created online');
-        return newItem;
-      } catch (error) {
-        if (isNetworkError(error)) {
-          console.log('[useCreateItem] 🔴 Network error - creating offline');
-
-          // Create temporary item
-          const tempItem: Item = {
-            id: `temp-${Date.now()}`,
-            listId,
-            type: data.type,
-            name: data.name,
-            completed: false,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdBy: 'temp',
-            updatedBy: 'temp',
-            version: 0,
-            order: 9999, // Will be reordered later
-            quantity: data.quantity,
-            quantityType: data.quantityType,
-            userIconId: data.userIconId || '',
-            description: data.description,
-          };
-
-          await cacheItem(tempItem);
-          await addToSyncQueue('CREATE', 'ITEM', tempItem.id, data, 0, listId);
-
-          return tempItem;
-        }
-        throw error;
-      }
-    },
-    onSuccess: (data) => {
-      // Directly update cache instead of invalidating to avoid refetch
-      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(data.listId)) || [];
-      // Check if item already exists (from offline cache update)
-      const exists = currentItems.some(i => i.id === data.id);
-      if (!exists) {
-        queryClient.setQueryData(queryKeys.items.byList(data.listId), [...currentItems, data]);
-      }
-      queryClient.setQueryData(queryKeys.items.detail(data.listId, data.id), data);
+      // Generate unique ID for optimistic item
+      const tempId = uuidv4();
+      const optimisticItem: Item = {
+        id: tempId,
+        listId,
+        type: data.type,
+        name: data.name,
+        completed: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: 'pending',
+        updatedBy: 'pending',
+        version: 1,
+        order: data.order ?? 9999,
+        quantity: data.quantity,
+        quantityType: data.quantityType,
+        userIconId: data.userIconId || '',
+        description: data.description,
+        pending: true,
+      };
+      
+      // Save to IndexedDB
+      await putItem(STORES.ITEMS, optimisticItem);
+      
+      // Add to sync queue
+      await addToSyncQueue('CREATE', 'ITEM', tempId, data, 1, listId);
+      
+      // Optimistic update in React Query cache
+      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+      queryClient.setQueryData(queryKeys.items.byList(listId), [...currentItems, optimisticItem]);
+      queryClient.setQueryData(queryKeys.items.detail(listId, tempId), optimisticItem);
+      
+      return optimisticItem;
     },
   });
 };
@@ -176,6 +180,7 @@ export const useUpdateItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async ({ 
       listId, 
       itemId, 
@@ -185,82 +190,54 @@ export const useUpdateItem = () => {
       itemId: string; 
       data: UpdateItemRequest 
     }) => {
-      console.log('[useUpdateItem] Starting update...', { listId, itemId });
+      console.log('[useUpdateItem] Updating item offline-first', { listId, itemId });
       
-      // Always try API call first, fall back to offline on error
-      try {
-        console.log('[useUpdateItem] 🌐 Making API call...');
-        const updatedItem = await itemsApi.update(listId, itemId, data);
-        await cacheItem(updatedItem);
-        console.log('[useUpdateItem] ✅ API call successful', updatedItem);
-        return updatedItem;
-      } catch (error) {
-        console.error('[useUpdateItem] ❌ API call failed', error);
-        if (isNetworkError(error)) {
-          console.log('[useUpdateItem] 🔴 Network error - working offline');
-
-          // Try React Query cache first, then IndexedDB
-          let existingItem: Item | undefined;
-          const reactQueryItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId));
-          if (reactQueryItems) {
-            existingItem = reactQueryItems.find(i => i.id === itemId);
-            console.log('[useUpdateItem] Found in React Query cache');
-          }
-          
-          if (!existingItem) {
-            const cachedItems = await getCachedItemsByList(listId);
-            existingItem = cachedItems.find(i => i.id === itemId);
-            console.log('[useUpdateItem] Found in IndexedDB:', !!existingItem);
-          }
-
-          if (existingItem) {
-            const updatedItem: Item = {
-              ...existingItem,
-              name: data.name,
-              completed: data.completed ?? existingItem.completed,
-              quantity: data.quantity,
-              quantityType: data.quantityType,
-              order: data.order ?? existingItem.order,
-              description: data.description,
-              updatedAt: new Date().toISOString(),
-              version: data.version,
-            };
-
-            await cacheItem(updatedItem);
-            await addToSyncQueue('UPDATE', 'ITEM', itemId, data, data.version, listId);
-
-            // Update React Query cache immediately to show pending state
-            const currentCachedItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
-            const updatedCache = currentCachedItems.map(i => i.id === itemId ? updatedItem : i);
-            queryClient.setQueryData(queryKeys.items.byList(listId), updatedCache);
-            console.log('[useUpdateItem] ✅ Updated React Query cache with pending item:', updatedItem);
-            
-            // Invalidate sync status to show pending indicator
-            queryClient.invalidateQueries({ queryKey: ['sync-status', 'item', itemId] });
-
-            console.log('[useUpdateItem] ✅ Cached and queued for sync');
-            return updatedItem;
-          }
-        }
-        // For any error, try to return something from cache to prevent UI blocking
-        console.error('[useUpdateItem] Fallback: returning original item from cache');
-        const cachedItems = await getCachedItemsByList(listId);
-        const fallbackItem = cachedItems.find(i => i.id === itemId);
-        if (fallbackItem) return fallbackItem;
-        
-        throw error; // Only throw if we have no fallback
+      // Get existing item from React Query cache or IndexedDB
+      let existingItem: Item | undefined;
+      const reactQueryItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId));
+      if (reactQueryItems) {
+        existingItem = reactQueryItems.find(i => i.id === itemId);
       }
-    },
-    onSuccess: (data) => {
-      // Update both detail and list caches directly
-      queryClient.setQueryData(queryKeys.items.detail(data.listId, data.id), data);
-      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(data.listId)) || [];
-      const updatedItems = currentItems.map(item => item.id === data.id ? data : item);
-      queryClient.setQueryData(queryKeys.items.byList(data.listId), updatedItems);
       
-      // Invalidate sync status to update UI indicators
-      queryClient.invalidateQueries({ queryKey: ['sync-status', 'item', data.id] });
+      if (!existingItem) {
+        const cachedItems = await getCachedItemsByList(listId);
+        existingItem = cachedItems.find(i => i.id === itemId);
+      }
+
+      if (!existingItem) {
+        throw new Error(`Item ${itemId} not found in cache`);
+      }
+
+      // Create updated item with pending flag
+      const updatedItem: Item = {
+        ...existingItem,
+        name: data.name ?? existingItem.name,
+        completed: data.completed ?? existingItem.completed,
+        quantity: data.quantity ?? existingItem.quantity,
+        quantityType: data.quantityType ?? existingItem.quantityType,
+        order: data.order ?? existingItem.order,
+        description: data.description ?? existingItem.description,
+        updatedAt: new Date().toISOString(),
+        version: data.version,
+        pending: true, // Mark as pending sync
+      };
+
+      // 1. Save to IndexedDB
+      await putItem(STORES.ITEMS, updatedItem);
+      
+      // 2. Add to sync queue
+      await addToSyncQueue('UPDATE', 'ITEM', itemId, data, data.version, listId);
+
+      // 3. Optimistic update in React Query cache
+      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+      const updatedCache = currentItems.map(i => i.id === itemId ? updatedItem : i);
+      queryClient.setQueryData(queryKeys.items.byList(listId), updatedCache);
+      queryClient.setQueryData(queryKeys.items.detail(listId, itemId), updatedItem);
+      
+      console.log('[useUpdateItem] ✅ Item queued for sync');
+      return updatedItem;
     },
+    // No onSuccess needed - optimistic update already done
   });
 };
 
@@ -271,6 +248,7 @@ export const useDeleteItem = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async ({ 
       listId, 
       itemId, 
@@ -280,41 +258,25 @@ export const useDeleteItem = () => {
       itemId: string; 
       version: number 
     }) => {
-      // If it's a temp item (created offline), just remove it from cache
-      if (itemId.startsWith('temp-')) {
-        console.log('[useDeleteItem] Deleting temp item locally only');
-        await removeCachedItem(itemId);
-        
-        // Also remove from sync queue if it was queued for creation
-        const pendingItems = await import('../services/storage/syncQueue').then(m => m.getPendingSyncItems());
-        const queueItem = (await pendingItems).find(
-          item => item.resourceType === 'ITEM' && item.resourceId === itemId
-        );
-        if (queueItem) {
-          await import('../services/storage/syncQueue').then(m => m.removeSyncItem(queueItem.id));
-        }
-        
-        return;
-      }
-
-      try {
-        await itemsApi.delete(listId, itemId, version);
-        // Only remove from cache after successful API call
-        await removeCachedItem(itemId);
-        console.log('[useDeleteItem] ✅ Deleted from server and removed from cache:', itemId);
-      } catch (error) {
-        if (isNetworkError(error)) {
-          console.log('[useDeleteItem] Network error, adding to sync queue (keeping in cache)');
-          // Don't remove from cache - let sync manager handle it after successful sync
-          await addToSyncQueue('DELETE', 'ITEM', itemId, { version }, version, listId);
-          return;
-        }
-        throw error;
-      }
+      console.log('[useDeleteItem] Deleting item offline-first');
+      
+      // 1. Add to sync queue (delete will happen when synced)
+      await addToSyncQueue('DELETE', 'ITEM', itemId, { version }, version, listId);
+      
+      // 2. Remove from IndexedDB and caches immediately
+      await removeCachedItem(itemId);
+      
+      // 3. Optimistically remove from React Query cache
+      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+      const filteredItems = currentItems.filter(item => item.id !== itemId);
+      queryClient.setQueryData(queryKeys.items.byList(listId), filteredItems);
+      queryClient.removeQueries({ queryKey: queryKeys.items.detail(listId, itemId) });
+      
+      console.log('[useDeleteItem] ✅ Item queued for deletion');
+      return { itemId };
     },
-    onSuccess: (_, variables) => {
-      queryClient.removeQueries({ queryKey: queryKeys.items.detail(variables.listId, variables.itemId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(variables.listId) });
+    onSuccess: () => {
+      // Invalidate lists to update item counts
       queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
     },
   });
