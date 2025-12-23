@@ -40,9 +40,13 @@ export default function ItemsList({ listId, listColor }: ItemsListProps) {
 
   const deleteCompletedMutation = useMutation({
     mutationFn: () => itemsApi.deleteCompleted(listId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
+    onSuccess: async () => {
+      // Remove the query data to force fresh fetch from server
+      queryClient.removeQueries({ queryKey: ['items', listId] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['items', listId], type: 'active' }),
+        queryClient.refetchQueries({ queryKey: ['lists'], type: 'active' })
+      ]);
       setDeleteCompletedDialogOpen(false);
     },
   });
@@ -52,9 +56,13 @@ export default function ItemsList({ listId, listColor }: ItemsListProps) {
       const openItemIds = openItems.map(item => item.id);
       return itemsApi.bulkComplete(listId, openItemIds);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      queryClient.invalidateQueries({ queryKey: ['lists'] });
+    onSuccess: async () => {
+      // Remove the query data to force fresh fetch from server
+      queryClient.removeQueries({ queryKey: ['items', listId] });
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['items', listId], type: 'active' }),
+        queryClient.refetchQueries({ queryKey: ['lists'], type: 'active' })
+      ]);
       setCompleteAllDialogOpen(false);
     },
   });

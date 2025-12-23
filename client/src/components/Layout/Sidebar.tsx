@@ -79,23 +79,19 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
   const drawerContent = (
     <>
-        <Box sx={{ p: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Typography variant="h6" component="div">
-            My Lists
-          </Typography>
-          <IconButton
-            color="primary"
-            onClick={() => setCreateDialogOpen(true)}
-            size="small"
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-
-        <Divider />
-
         <List sx={{ flex: 1, overflow: 'auto', py: 1 }}>
-          <ListItem disablePadding>
+          <ListItem 
+            disablePadding
+            secondaryAction={
+              <IconButton
+                color="primary"
+                onClick={() => setCreateDialogOpen(true)}
+                size="small"
+              >
+                <AddIcon />
+              </IconButton>
+            }
+          >
             <ListItemButton
               selected={selectedListId === null}
               onClick={() => navigate('/')}
