@@ -29,23 +29,23 @@ type ListsResponse struct {
 
 // ItemResponse represents a response containing a single item
 type ItemResponse struct {
-	ID                 string `json:"id"`
-	ListID             string `json:"listId"`
-	Type               string `json:"type"`
-	Name               string `json:"name"`
-	Completed          bool   `json:"completed"`
-	CreatedAt          string `json:"createdAt"`
-	UpdatedAt          string `json:"updatedAt"`
-	CreatedBy          string `json:"createdBy"`
-	UpdatedBy          string `json:"updatedBy"`
-	Version            int32  `json:"version"`
-	Order              int32  `json:"order"`
-	Quantity           *int32 `json:"quantity,omitempty"`
-	QuantityType       string `json:"quantityType,omitempty"`
-	UserIconID         string `json:"userIconId"`
-	Description        string `json:"description,omitempty"`
-	ItemCount          int32  `json:"itemCount,omitempty"`
-	CompletedItemCount int32  `json:"completedItemCount,omitempty"`
+	ID                 string   `json:"id"`
+	ListID             string   `json:"listId"`
+	Type               string   `json:"type"`
+	Name               string   `json:"name"`
+	Completed          bool     `json:"completed"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          string   `json:"updatedAt"`
+	CreatedBy          string   `json:"createdBy"`
+	UpdatedBy          string   `json:"updatedBy"`
+	Version            int32    `json:"version"`
+	Order              int32    `json:"order"`
+	Quantity           *float64 `json:"quantity,omitempty"`
+	QuantityType       string   `json:"quantityType,omitempty"`
+	UserIconID         string   `json:"userIconId"`
+	Description        string   `json:"description,omitempty"`
+	ItemCount          int32    `json:"itemCount,omitempty"`
+	CompletedItemCount int32    `json:"completedItemCount,omitempty"`
 }
 
 // ItemsResponse represents a response containing multiple items

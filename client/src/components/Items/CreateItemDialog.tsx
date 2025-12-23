@@ -52,7 +52,7 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
       type,
       name: name.trim(),
       ...(type === 'list' && description && { description: description.trim() }),
-      ...(type === 'item' && quantity && { quantity: parseFloat(quantity) }),
+      ...(type === 'item' && quantity && { quantity: parseInt(quantity, 10) }),
       ...(type === 'item' && quantity && { quantityType }),
       ...(user && { userIconId: user.iconId }),
     };

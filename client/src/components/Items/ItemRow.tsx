@@ -59,6 +59,8 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
       data: {
         name: item.name,
         completed: !item.completed,
+        quantity: item.quantity,
+        quantityType: item.quantityType,
         version: item.version,
       },
     });

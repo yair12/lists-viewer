@@ -38,7 +38,7 @@ type Item struct {
 	UpdatedBy          string             `bson:"updatedBy" json:"updatedBy"`
 	Version            int32              `bson:"version" json:"version"`
 	Order              int32              `bson:"order" json:"order"`
-	Quantity           *int32             `bson:"quantity,omitempty" json:"quantity,omitempty"`
+	Quantity           *float64           `bson:"quantity,omitempty" json:"quantity,omitempty"`
 	QuantityType       string             `bson:"quantityType,omitempty" json:"quantityType,omitempty"`
 	UserIconID         string             `bson:"userIconId" json:"userIconId"`
 	Archived           bool               `bson:"archived" json:"archived"`
@@ -95,23 +95,23 @@ type DeleteListRequest struct {
 
 // CreateItemRequest represents a request to create an item
 type CreateItemRequest struct {
-	Type         string `json:"type" binding:"required,oneof=item list"`
-	Name         string `json:"name" binding:"required,min=1,max=255"`
-	Quantity     *int32 `json:"quantity,omitempty" binding:"omitempty,gt=0"`
-	QuantityType string `json:"quantityType,omitempty" binding:"max=50"`
-	UserIconID   string `json:"userIconId"`
-	Description  string `json:"description,omitempty" binding:"max=500"`
+	Type         string   `json:"type" binding:"required,oneof=item list"`
+	Name         string   `json:"name" binding:"required,min=1,max=255"`
+	Quantity     *float64 `json:"quantity,omitempty" binding:"omitempty,gt=0"`
+	QuantityType string   `json:"quantityType,omitempty" binding:"max=50"`
+	UserIconID   string   `json:"userIconId"`
+	Description  string   `json:"description,omitempty" binding:"max=500"`
 }
 
 // UpdateItemRequest represents a request to update an item
 type UpdateItemRequest struct {
-	Name         string `json:"name" binding:"required,min=1,max=255"`
-	Completed    *bool  `json:"completed,omitempty"`
-	Quantity     *int32 `json:"quantity,omitempty" binding:"omitempty,gt=0"`
-	QuantityType string `json:"quantityType,omitempty" binding:"max=50"`
-	Order        int32  `json:"order" binding:"required"`
-	Version      int32  `json:"version" binding:"required"`
-	Description  string `json:"description,omitempty" binding:"max=500"`
+	Name         string   `json:"name" binding:"required,min=1,max=255"`
+	Completed    *bool    `json:"completed,omitempty"`
+	Quantity     *float64 `json:"quantity,omitempty" binding:"omitempty,gt=0"`
+	QuantityType string   `json:"quantityType,omitempty" binding:"max=50"`
+	Order        int32    `json:"order" binding:"required"`
+	Version      int32    `json:"version" binding:"required"`
+	Description  string   `json:"description,omitempty" binding:"max=500"`
 }
 
 // DeleteItemRequest represents a request to delete an item
