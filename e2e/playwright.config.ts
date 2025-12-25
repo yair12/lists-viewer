@@ -26,8 +26,8 @@ export default defineConfig({
     /* Screenshot on failure */
     screenshot: 'only-on-failure',
     
-    /* Video on failure */
-    video: 'retain-on-failure',
+    /* Video - always record */
+    video: 'on',
     
     /* Action timeout */
     actionTimeout: 10000,

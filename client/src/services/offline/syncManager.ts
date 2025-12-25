@@ -249,7 +249,8 @@ class SyncManager {
           description?: string;
         };
         const newItem = await itemsApi.create(listId, data);
-        await cacheItem(newItem);
+        // Clear pending flag when caching synced item
+        await cacheItem({ ...newItem, pending: false });
         break;
       }
       case 'UPDATE': {
@@ -263,7 +264,8 @@ class SyncManager {
           description?: string;
         };
         const updatedItem = await itemsApi.update(listId, resourceId, data);
-        await cacheItem(updatedItem);
+        // Clear pending flag when caching synced item
+        await cacheItem({ ...updatedItem, pending: false });
         break;
       }
       case 'DELETE': {
