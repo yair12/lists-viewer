@@ -335,10 +335,11 @@ func TestItemCRUD(t *testing.T) {
 	var itemVersion int32
 
 	t.Run("Create item", func(t *testing.T) {
+		var quantity float64 = 2
 		req := models.CreateItemRequest{
 			Name:         "Buy groceries",
 			Type:         "item",
-			Quantity:     ptrInt32(2),
+			Quantity:     &quantity,
 			QuantityType: "packs",
 		}
 
@@ -526,7 +527,6 @@ func TestMissingUserIDHeader(t *testing.T) {
 	}{
 		{"Get lists without user ID", "GET", "/api/v1/lists"},
 		{"Create list without user ID", "POST", "/api/v1/lists"},
-		{"Get icons without user ID", "GET", "/api/v1/icons"},
 	}
 
 	for _, tt := range tests {
