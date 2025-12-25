@@ -290,14 +290,19 @@ export const useReorderItems = () => {
 
   return useMutation({
     mutationFn: async ({ listId, data }: { listId: string; data: ReorderItemsRequest }) => {
+      // Always add to sync queue first (offline-first approach)
+      await addToSyncQueue('UPDATE', 'ITEM', 'reorder', data, 0, listId);
+      
       try {
+        // Try to sync immediately if online
         const reorderedItems = await itemsApi.reorder(listId, data);
         await cacheItems(reorderedItems);
-        return reorderedItems;
+        return { items: reorderedItems, listId };
       } catch (error) {
         if (isNetworkError(error)) {
-          console.log('[useReorderItems] Network error, updating cache optimistically');
+          console.log('[useReorderItems] Network error, will sync later');
 
+          // Update local cache optimistically
           const cachedItems = await getCachedItemsByList(listId);
           const orderMap = new Map(data.items.map(item => [item.id, item.order]));
 
@@ -307,15 +312,70 @@ export const useReorderItems = () => {
           }));
 
           await cacheItems(reorderedItems);
-          await addToSyncQueue('UPDATE', 'ITEM', 'reorder', data, 0, listId);
-
-          return reorderedItems;
+          
+          return { items: reorderedItems, listId };
         }
         throw error;
       }
     },
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(variables.listId) });
+    onMutate: async ({ listId, data }) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: queryKeys.items.byList(listId) });
+
+      // Snapshot the previous value
+      const previousItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId));
+
+      // Optimistically update to the new value
+      if (previousItems && previousItems.length > 0) {
+        console.log('[useReorderItems] onMutate - updating cache with', data.items.length, 'items');
+        const orderMap = new Map(data.items.map(item => [item.id, item.order]));
+        
+        // Update orders, then sort ONLY open items, keep completed items separate
+        const openItems = previousItems
+          .filter(item => !item.completed)
+          .map(item => {
+            const newOrder = orderMap.get(item.id);
+            if (newOrder !== undefined) {
+              console.log(`[useReorderItems] Item ${item.name}: order ${item.order} -> ${newOrder}`);
+            }
+            return newOrder !== undefined ? { ...item, order: newOrder } : item;
+          })
+          .sort((a, b) => a.order - b.order);
+        
+        const completedItems = previousItems.filter(item => item.completed);
+        
+        console.log('[useReorderItems] Setting new order:', openItems.map(i => i.name));
+        queryClient.setQueryData(queryKeys.items.byList(listId), [...openItems, ...completedItems]);
+      } else {
+        console.warn('[useReorderItems] onMutate - no previous items found in cache');
+      }
+
+      // Return context with the snapshotted value
+      return { previousItems };
+    },
+    onError: (_err, variables, context) => {
+      // If the mutation fails, rollback to the previous value
+      if (context?.previousItems) {
+        queryClient.setQueryData(queryKeys.items.byList(variables.listId), context.previousItems);
+      }
+    },
+    onSuccess: ({ items, listId }) => {
+      // Server response only contains {id, order} pairs, not full item data
+      // The optimistic update in onMutate already updated the UI correctly
+      // Just ensure IndexedDB is updated with the new orders
+      const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId));
+      if (currentItems) {
+        const orderMap = new Map(items.map(item => [item.id, item.order]));
+        const updatedItems = currentItems.map(item => {
+          const newOrder = orderMap.get(item.id);
+          return newOrder !== undefined ? { ...item, order: newOrder } : item;
+        });
+        
+        // Update IndexedDB cache
+        cacheItems(updatedItems);
+        
+        // No need to update React Query cache again - onMutate already did it
+      }
     },
   });
 };

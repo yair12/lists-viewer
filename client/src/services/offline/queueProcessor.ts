@@ -9,6 +9,7 @@ import {
 } from '../storage/syncQueue';
 import { STORES, getItem, putItem } from '../storage/indexedDB';
 import { getSyncDialogsInstance } from './syncDialogsStore';
+import { queryClient, queryKeys } from '../api/queryClient';
 import type { Item, List } from '../../types';
 
 export class QueueProcessor {
@@ -180,6 +181,12 @@ export class QueueProcessor {
     listId: string,
     payload: any
   ): Promise<Item> {
+    // Special case: reorder operation
+    if (itemId === 'reorder') {
+      const reorderedItems = await itemsApi.reorder(listId, payload);
+      return reorderedItems as any; // Return array of items
+    }
+
     switch (operationType) {
       case 'CREATE':
         return await itemsApi.create(listId, payload);
@@ -218,18 +225,60 @@ export class QueueProcessor {
    * Update local storage with server response
    */
   private async updateLocalStorage(operation: SyncQueueItem, result: any) {
-    if (!result) return; // Delete operations don't return data
+    if (!result) {
+      // Delete operations - invalidate cache
+      const { resourceType, parentId } = operation;
+      if (resourceType === 'ITEM' && parentId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
+      } else if (resourceType === 'LIST') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
+      }
+      return;
+    }
 
-    const { resourceType } = operation;
+    const { resourceType, parentId, resourceId } = operation;
 
     switch (resourceType) {
       case 'ITEM':
-        // Update item in IndexedDB with server data (real ID, updated version)
-        await putItem(STORES.ITEMS, result);
+        // Special handling for reorder operations
+        if (resourceId === 'reorder' && Array.isArray(result)) {
+          // Result is an array of reordered items from server
+          // Update all items in IndexedDB and React Query cache
+          for (const item of result) {
+            await putItem(STORES.ITEMS, item);
+          }
+          
+          // Refresh the entire list in React Query cache
+          if (parentId) {
+            queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
+          }
+        } else {
+          // Regular single item update
+          await putItem(STORES.ITEMS, result);
+          
+          // Update React Query cache immediately with the new version
+          if (parentId) {
+            const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
+            const updatedItems = currentItems.map((item: Item) => 
+              item.id === resourceId ? { ...result, pending: false } : item
+            );
+            queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
+            queryClient.setQueryData(queryKeys.items.detail(parentId, resourceId), { ...result, pending: false });
+          }
+        }
         break;
+        
       case 'LIST':
         // Update list in IndexedDB
         await putItem(STORES.LISTS, result);
+        
+        // Update React Query cache immediately
+        const currentLists = queryClient.getQueryData<List[]>(queryKeys.lists.all) || [];
+        const updatedLists = currentLists.map((list: List) => 
+          list.id === resourceId ? { ...result, pending: false } : list
+        );
+        queryClient.setQueryData(queryKeys.lists.all, updatedLists);
+        queryClient.setQueryData(queryKeys.lists.detail(resourceId), { ...result, pending: false });
         break;
     }
   }

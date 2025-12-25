@@ -27,6 +27,8 @@ export interface SyncQueueItem {
 
 /**
  * Add an operation to the sync queue
+ * Automatically deduplicates: if there's already a pending UPDATE for the same resource,
+ * replace it with the new one. DELETE operations supersede all previous operations.
  */
 export const addToSyncQueue = async (
   operationType: OperationType,
@@ -36,6 +38,43 @@ export const addToSyncQueue = async (
   version: number,
   parentId?: string
 ): Promise<SyncQueueItem> => {
+  // Check for existing pending operations on the same resource
+  const allItems = await getAllItems<SyncQueueItem>(STORES.SYNC_QUEUE);
+  const existingOps = allItems.filter(
+    item => 
+      item.resourceId === resourceId && 
+      item.resourceType === resourceType &&
+      item.parentId === parentId && // Also match parentId for proper deduplication
+      (item.status === 'PENDING' || item.status === 'FAILED')
+  );
+
+  // Deduplication logic:
+  // - If adding DELETE, remove all previous operations for this resource
+  // - If adding UPDATE, remove previous UPDATE operations (keep CREATE if exists)
+  // - If adding CREATE, remove any previous CREATE (shouldn't happen, but just in case)
+  
+  if (operationType === 'DELETE') {
+    // DELETE supersedes everything - remove all pending ops for this resource
+    for (const op of existingOps) {
+      await deleteItem(STORES.SYNC_QUEUE, op.id);
+      console.log(`🗑️  Removed superseded ${op.operationType} for ${resourceType} ${resourceId}`);
+    }
+  } else if (operationType === 'UPDATE') {
+    // Remove previous UPDATEs, but keep CREATE if it exists
+    const updatesToRemove = existingOps.filter(op => op.operationType === 'UPDATE');
+    for (const op of updatesToRemove) {
+      await deleteItem(STORES.SYNC_QUEUE, op.id);
+      console.log(`🔄 Replaced pending UPDATE for ${resourceType} ${resourceId}`);
+    }
+  } else if (operationType === 'CREATE') {
+    // Remove any previous CREATE (shouldn't normally happen)
+    const createsToRemove = existingOps.filter(op => op.operationType === 'CREATE');
+    for (const op of createsToRemove) {
+      await deleteItem(STORES.SYNC_QUEUE, op.id);
+      console.log(`🔄 Replaced pending CREATE for ${resourceType} ${resourceId}`);
+    }
+  }
+
   const queueItem: SyncQueueItem = {
     id: uuidv4(),
     timestamp: new Date().toISOString(),
@@ -50,6 +89,7 @@ export const addToSyncQueue = async (
   };
 
   await putItem(STORES.SYNC_QUEUE, queueItem);
+  console.log(`➕ Queued ${operationType} for ${resourceType} ${resourceId}`);
   return queueItem;
 };
 
