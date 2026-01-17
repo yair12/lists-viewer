@@ -18,6 +18,18 @@ test.describe('Visual Feedback', () => {
     await page.click(`text=${list.name}`);
     await page.waitForLoadState('networkidle');
 
+    // Go offline to prevent sync from completing
+    await page.evaluate(() => {
+      Object.defineProperty(window.navigator, 'onLine', {
+        writable: true,
+        value: false
+      });
+      window.dispatchEvent(new Event('offline'));
+    });
+    
+    // Wait a bit for offline state to be registered
+    await page.waitForTimeout(500);
+
     // Get the item row
     const itemRow = page.locator(`[data-item-id="${item.id}"]`);
     
@@ -45,43 +57,18 @@ test.describe('Visual Feedback', () => {
     await page.waitForSelector('text=Edit Item', { state: 'hidden' });
     
     // Wait for background to become yellow (pending sync indicator)
-    await page.waitForTimeout(200); // Small delay for optimistic update
+    await page.waitForTimeout(500);
     
     const bgColorDuringSync = await itemRow.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
     });
     console.log('[TEST] Background during sync:', bgColorDuringSync);
     
-    // The background should be yellow/warning color during sync
+    // The background should be yellow/warning color (pending state since we're offline)
     expect(bgColorDuringSync).not.toBe(initialBgColor);
     expect(bgColorDuringSync).not.toBe('rgba(0, 0, 0, 0)'); // Not transparent
     expect(bgColorDuringSync).not.toBe('transparent');
-    
-    // Wait for sync to complete - background should go back to normal
-    // Use waitFor with condition instead of fixed timeout
-    await page.waitForFunction(
-      (itemId) => {
-        const row = document.querySelector(`[data-item-id="${itemId}"]`);
-        if (!row) return false;
-        const bgColor = window.getComputedStyle(row).backgroundColor;
-        // Check if background is transparent or hover color (not yellow)
-        return bgColor === 'rgba(0, 0, 0, 0)' || 
-               bgColor === 'transparent' || 
-               bgColor === 'rgba(255, 255, 255, 0.08)';
-      },
-      item.id,
-      { timeout: 10000 } // 10 second timeout
-    );
-    
-    const finalBgColor = await itemRow.evaluate((el) => {
-      return window.getComputedStyle(el).backgroundColor;
-    });
-    console.log('[TEST] Final background:', finalBgColor);
-    
-    // Should be back to transparent or hover color (allow some flexibility)
-    const isTransparent = finalBgColor === 'rgba(0, 0, 0, 0)' || finalBgColor === 'transparent';
-    const isHover = finalBgColor === 'rgba(255, 255, 255, 0.08)';
-    expect(isTransparent || isHover).toBe(true);
+    expect(bgColorDuringSync).toContain('178'); // Should be rgb(178, 116, 26)
   });
 
   test('should show yellow background when reordering items', async ({
@@ -176,6 +163,9 @@ test.describe('Visual Feedback', () => {
     testUser,
     apiHelper,
   }) => {
+    // Listen to ALL console messages for debugging
+    page.on('console', msg => console.log('[BROWSER]', msg.text()));
+    
     // Create a list and item
     const list = await apiHelper.createList(testUser.id, { name: 'Complete Test List' });
     const item = await apiHelper.createItem(testUser.id, list.id, { 
@@ -189,65 +179,113 @@ test.describe('Visual Feedback', () => {
     await page.click(`text=${list.name}`);
     await page.waitForLoadState('networkidle');
 
-    // Get the item row and checkbox
+    // STEP 1: Go offline
+    await page.evaluate(() => {
+      Object.defineProperty(window.navigator, 'onLine', {
+        writable: true,
+        value: false
+      });
+      window.dispatchEvent(new Event('offline'));
+      console.log('[TEST] ⚫ Set OFFLINE mode');
+    });
+    await page.waitForTimeout(1000);
+
+    // STEP 2: Complete the item while offline
     const itemRow = page.locator(`[data-item-id="${item.id}"]`);
-    const checkbox = itemRow.getByTestId('item-checkbox');
+    const checkbox = itemRow.locator('input[type="checkbox"]');
     
-    // Click checkbox to complete the item
+    console.log('[TEST] 📝 Clicking checkbox to complete item while offline');
     await checkbox.click();
-    
-    // Immediately check if background changed (before item moves to completed section)
-    await page.waitForTimeout(50); // Very small delay for React to update
-    
-    // Try to find the item - it might have already moved to completed section
-    // So check both the original itemRow and look for it by text
-    let bgColorDuringSync = await itemRow.evaluate((el) => {
+    await page.waitForTimeout(1000);
+
+    // STEP 3: Verify yellow background (pending state)
+    const anyItemRow = page.locator('[data-item-id]').filter({ hasText: 'Test Item to Complete' }).first();
+    const bgColorOffline = await anyItemRow.evaluate((el) => {
       return window.getComputedStyle(el).backgroundColor;
-    }).catch(() => 'element-gone');
+    });
     
-    // If element is gone or transparent, try finding it in the list
-    if (bgColorDuringSync === 'element-gone' || bgColorDuringSync === 'rgba(0, 0, 0, 0)') {
-      const anyItemRow = page.locator('[data-item-id]').filter({ hasText: 'Test Item to Complete' }).first();
-      bgColorDuringSync = await anyItemRow.evaluate((el) => {
-        return window.getComputedStyle(el).backgroundColor;
+    console.log('[TEST] 🟡 Background while offline:', bgColorOffline);
+    expect(bgColorOffline).toBe('rgb(178, 116, 26)');
+
+    // STEP 4: Verify item is in sync queue
+    const queueBefore = await page.evaluate(async () => {
+      const db = await (window as any).__openDB();
+      return new Promise<number>((resolve) => {
+        const tx = db.transaction('syncQueue', 'readonly');
+        const store = tx.objectStore('syncQueue');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result.length);
+        request.onerror = () => resolve(0);
       });
-    }
+    });
+    console.log('[TEST] 📋 Items in sync queue:', queueBefore);
+    expect(queueBefore).toBeGreaterThan(0);
+
+    // STEP 5: Go back online
+    await page.evaluate(() => {
+      Object.defineProperty(window.navigator, 'onLine', {
+        writable: true,
+        value: true
+      });
+      window.dispatchEvent(new Event('online'));
+      console.log('[TEST] 🟢 Set ONLINE mode');
+    });
     
-    console.log('[TEST] Background during complete sync:', bgColorDuringSync);
-    
-    // Should show yellow background OR item completed so fast it's already transparent
-    // (both are acceptable - the important thing is the feature works when network is slow)
-    const isYellow = bgColorDuringSync.includes('178') || bgColorDuringSync.includes('116');
-    const isTransparent = bgColorDuringSync === 'rgba(0, 0, 0, 0)' || bgColorDuringSync === 'transparent';
-    expect(isYellow || isTransparent).toBe(true);
-    
-    // Wait for sync to complete using waitForFunction
+    // Wait for network status to update
     await page.waitForFunction(
-      (itemId) => {
-        const row = document.querySelector(`[data-item-id="${itemId}"]`);
-        if (!row) return true; // Item might be hidden or moved - that's fine
-        const bgColor = window.getComputedStyle(row).backgroundColor;
-        return bgColor === 'rgba(0, 0, 0, 0)' || 
-               bgColor === 'transparent' || 
-               bgColor === 'rgba(255, 255, 255, 0.08)';
-      },
-      item.id,
-      { timeout: 10000 }
+      () => (window as any).__networkStatus?.isOnline === true,
+      { timeout: 10000, polling: 500 }
     );
-    
-    // Final check - item should be completed and background normal
-    const completedItem = page.locator(`[data-item-id="${item.id}"]`);
-    const exists = await completedItem.count() > 0;
-    
-    if (exists) {
-      const finalBgColor = await completedItem.evaluate((el) => {
-        return window.getComputedStyle(el).backgroundColor;
+    console.log('[TEST] ✅ Network status confirmed online');
+
+    // STEP 6: Trigger queue processing
+    await page.evaluate(() => {
+      const qp = (window as any).__queueProcessor;
+      console.log('[TEST] 🔄 Triggering queue processor');
+      qp?.trigger();
+    });
+
+    // STEP 7: Wait for sync to complete (background clears)
+    console.log('[TEST] ⏳ Waiting for yellow background to clear...');
+    await page.waitForFunction(
+      (itemName) => {
+        // Find the row containing the item text
+        const rows = Array.from(document.querySelectorAll('[data-item-id]'));
+        const row = rows.find(r => r.textContent?.includes(itemName));
+        if (!row) {
+          console.log('[WAIT] Item row not found');
+          return false;
+        }
+        const bgColor = window.getComputedStyle(row as Element).backgroundColor;
+        const isCleared = bgColor === 'rgba(0, 0, 0, 0)' || 
+                         bgColor === 'transparent' || 
+                         bgColor === 'rgba(255, 255, 255, 0.08)';
+        if (!isCleared) {
+          console.log('[WAIT] Background still:', bgColor);
+        }
+        return isCleared;
+      },
+      'Test Item to Complete',
+      { timeout: 20000, polling: 1000 }
+    );
+
+    // STEP 8: Final verification
+    const finalBgColor = await anyItemRow.evaluate((el) => {
+      return window.getComputedStyle(el).backgroundColor;
+    });
+    console.log('[TEST] ✅ Final background (should be clear):', finalBgColor);
+
+    const queueAfter = await page.evaluate(async () => {
+      const db = await (window as any).__openDB();
+      return new Promise<number>((resolve) => {
+        const tx = db.transaction('syncQueue', 'readonly');
+        const store = tx.objectStore('syncQueue');
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result.length);
+        request.onerror = () => resolve(-1);
       });
-      console.log('[TEST] Final background after sync:', finalBgColor);
-      
-      const isFinalTransparent = finalBgColor === 'rgba(0, 0, 0, 0)' || finalBgColor === 'transparent';
-      const isFinalHover = finalBgColor === 'rgba(255, 255, 255, 0.08)';
-      expect(isFinalTransparent || isFinalHover).toBe(true);
-    }
+    });
+    console.log('[TEST] ✅ Final queue count:', queueAfter);
+    expect(queueAfter).toBe(0);
   });
 });

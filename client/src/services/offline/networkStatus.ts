@@ -191,4 +191,9 @@ class NetworkStatusService {
 // Export singleton instance
 export const networkStatus = new NetworkStatusService();
 
+// Expose for dev/test access
+if (typeof window !== 'undefined') {
+  (window as any).__networkStatus = networkStatus;
+}
+
 export default networkStatus;

@@ -18,7 +18,8 @@ import {
   removeCachedList, 
   removeCachedItem 
 } from '../storage/cacheManager';
-import type { ErrorResponse } from '../../types';
+import { queryClient, queryKeys } from '../api/queryClient';
+import type { ErrorResponse, Item } from '../../types';
 
 // Sync status
 type SyncStatus = 'idle' | 'syncing' | 'error';
@@ -80,6 +81,7 @@ class SyncManager {
    * Notify when an item has been synced
    */
   private notifyItemSynced(itemId: string, resourceType: 'LIST' | 'ITEM'): void {
+    console.log(`[SyncManager] 🔔 Notifying listeners: ${resourceType} ${itemId} synced`);
     this.itemSyncedListeners.forEach((listener) => {
       try {
         listener(itemId, resourceType);
@@ -264,8 +266,20 @@ class SyncManager {
           description?: string;
         };
         const updatedItem = await itemsApi.update(listId, resourceId, data);
+        
         // Clear pending flag when caching synced item
-        await cacheItem({ ...updatedItem, pending: false });
+        const itemWithoutPending = { ...updatedItem, pending: false };
+        await cacheItem(itemWithoutPending);
+        
+        // Also update React Query cache to immediately reflect the change
+        const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+        const updatedItems = currentItems.map(i => 
+          i.id === resourceId ? itemWithoutPending : i
+        );
+        queryClient.setQueryData(queryKeys.items.byList(listId), updatedItems);
+        queryClient.setQueryData(queryKeys.items.detail(listId, resourceId), itemWithoutPending);
+        
+        console.log(`[SyncManager] 🔄 Updated React Query cache for item ${resourceId}, pending=false`);
         break;
       }
       case 'DELETE': {

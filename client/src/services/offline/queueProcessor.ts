@@ -57,8 +57,11 @@ export class QueueProcessor {
    * Manually trigger queue processing (e.g., after queuing new operations)
    */
   async trigger() {
+    console.log(`[QueueProcessor] trigger() called - navigator.onLine=${navigator.onLine}, processing=${this.processing}`);
     if (navigator.onLine && !this.processing) {
       await this.processQueue();
+    } else {
+      console.log(`[QueueProcessor] Skipping trigger - ${!navigator.onLine ? 'offline' : 'already processing'}`);
     }
   }
 
@@ -67,6 +70,7 @@ export class QueueProcessor {
    */
   private async processQueue() {
     if (this.processing) {
+      console.log('[QueueProcessor] Already processing, skipping');
       return; // Already processing
     }
 
@@ -76,10 +80,13 @@ export class QueueProcessor {
     }
 
     this.processing = true;
+    console.log('[QueueProcessor] Starting queue processing');
 
     try {
       const pending = await getPendingSyncItems();
       const failed = await getFailedSyncItems();
+      
+      console.log(`[QueueProcessor] Found ${pending.length} pending and ${failed.length} failed items`);
       
       // Retry failed items that haven't exceeded max retries (3)
       const retriable = failed.filter(item => (item.retryCount || 0) < 3);
@@ -87,6 +94,8 @@ export class QueueProcessor {
       const allItems = [...pending, ...retriable];
       
       if (allItems.length === 0) {
+        console.log('[QueueProcessor] No items to process');
+        this.processing = false;
         return;
       }
 
@@ -463,3 +472,8 @@ export class QueueProcessor {
 
 // Singleton instance
 export const queueProcessor = new QueueProcessor();
+
+// Expose for dev/test access
+if (typeof window !== 'undefined') {
+  (window as any).__queueProcessor = queueProcessor;
+}
