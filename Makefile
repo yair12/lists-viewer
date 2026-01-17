@@ -129,6 +129,20 @@ docker-build: ## Build Docker image
 	docker build -t $(FULL_IMAGE) .
 	@echo "$(COLOR_SUCCESS)✓ Docker image built: $(FULL_IMAGE)$(COLOR_RESET)"
 
+.PHONY: docker-build-arm64
+docker-build-arm64: ## Build ARM64 Docker image for Raspberry Pi
+	@echo "$(COLOR_INFO)Building ARM64 Docker image: $(FULL_IMAGE)...$(COLOR_RESET)"
+	mkdir -p ./k8s-images
+	docker buildx build \
+		--platform linux/arm64 \
+		--tag $(IMAGE_NAME):$(IMAGE_TAG) \
+		--tag $(IMAGE_NAME):latest \
+		--file Dockerfile \
+		--progress=plain \
+		--output type=docker,dest=./k8s-images/$(IMAGE_NAME)-arm64.tar \
+		.
+	@echo "$(COLOR_SUCCESS)✓ ARM64 image exported to: ./k8s-images/$(IMAGE_NAME)-arm64.tar$(COLOR_RESET)"
+
 .PHONY: docker-save
 docker-save: ## Save Docker image to tar file
 	@echo "$(COLOR_INFO)Saving Docker image to tar file...$(COLOR_RESET)"
@@ -206,8 +220,16 @@ deploy-image: docker-build docker-save check-remote ## Build, save, and deploy i
 	ssh -p $(REMOTE_PORT) $(REMOTE_USER)@$(REMOTE_HOST) "mkdir -p /tmp/images"
 	scp -P $(REMOTE_PORT) ./build/$(IMAGE_NAME)-$(IMAGE_TAG).tar $(REMOTE_USER)@$(REMOTE_HOST):/tmp/images/
 	@echo "$(COLOR_INFO)Importing image to containerd on remote server...$(COLOR_RESET)"
-	ssh -p $(REMOTE_PORT) $(REMOTE_USER)@$(REMOTE_HOST) "ctr -n k8s.io image import /tmp/images/$(IMAGE_NAME)-$(IMAGE_TAG).tar && rm /tmp/images/$(IMAGE_NAME)-$(IMAGE_TAG).tar"
+	ssh -p $(REMOTE_PORT) $(REMOTE_USER)@$(REMOTE_HOST) "sudo ctr -n k8s.io image import /tmp/images/$(IMAGE_NAME)-$(IMAGE_TAG).tar && rm /tmp/images/$(IMAGE_NAME)-$(IMAGE_TAG).tar"
 	@echo "$(COLOR_SUCCESS)✓ Image deployed to remote server$(COLOR_RESET)"
+
+.PHONY: deploy-image-arm64
+deploy-image-arm64: docker-build-arm64 check-remote ## Build ARM64 image and deploy to remote server
+	@echo "$(COLOR_INFO)Copying ARM64 image to remote server $(REMOTE_HOST)...$(COLOR_RESET)"
+	scp -P $(REMOTE_PORT) ./k8s-images/$(IMAGE_NAME)-arm64.tar $(REMOTE_USER)@$(REMOTE_HOST):/tmp/
+	@echo "$(COLOR_INFO)Importing ARM64 image to containerd on remote server...$(COLOR_RESET)"
+	ssh -p $(REMOTE_PORT) $(REMOTE_USER)@$(REMOTE_HOST) "sudo ctr -n k8s.io image import /tmp/$(IMAGE_NAME)-arm64.tar && rm /tmp/$(IMAGE_NAME)-arm64.tar"
+	@echo "$(COLOR_SUCCESS)✓ ARM64 image deployed to remote server$(COLOR_RESET)"
 
 .PHONY: deploy-dev
 deploy-dev: deploy-image ## Deploy to development environment
@@ -223,6 +245,19 @@ deploy-dev: deploy-image ## Deploy to development environment
 		--set image.pullPolicy=Never"
 	@echo "$(COLOR_SUCCESS)✓ Deployed to development$(COLOR_RESET)"
 
+.PHONY: deploy-dev-arm64
+deploy-dev-arm64: deploy-image-arm64 ## Deploy ARM64 image to development environment
+	@echo "$(COLOR_INFO)Deploying ARM64 to development on $(REMOTE_HOST)...$(COLOR_RESET)"
+	helm upgrade $(HELM_RELEASE) $(HELM_CHART) \
+		--install \
+		--namespace dev \
+		--create-namespace \
+		--values $(HELM_CHART)/values-dev.yaml \
+		--set image.repository=$(IMAGE_NAME) \
+		--set image.tag=$(IMAGE_TAG) \
+		--set image.pullPolicy=Never
+	@echo "$(COLOR_SUCCESS)✓ ARM64 deployed to development$(COLOR_RESET)"
+
 .PHONY: deploy-prod
 deploy-prod: deploy-image ## Deploy to production environment
 	@echo "$(COLOR_WARNING)Deploying to PRODUCTION on $(REMOTE_HOST)...$(COLOR_RESET)"
@@ -231,13 +266,28 @@ deploy-prod: deploy-image ## Deploy to production environment
 	ssh -p $(REMOTE_PORT) $(REMOTE_USER)@$(REMOTE_HOST) "\
 		helm upgrade $(HELM_RELEASE) $(HELM_CHART) \
 		--install \
-		--namespace prod \
+		--namespace lists-viewer \
 		--create-namespace \
 		--values $(HELM_CHART)/values-prod.yaml \
 		--set image.repository=$(DOCKER_REGISTRY)/$(IMAGE_NAME) \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Never"
 	@echo "$(COLOR_SUCCESS)✓ Deployed to production$(COLOR_RESET)"
+
+.PHONY: deploy-prod-arm64
+deploy-prod-arm64: deploy-image-arm64 ## Deploy ARM64 image to production environment
+	@echo "$(COLOR_WARNING)Deploying ARM64 to PRODUCTION on $(REMOTE_HOST)...$(COLOR_RESET)"
+	@echo "$(COLOR_WARNING)Press Ctrl+C to cancel, or Enter to continue...$(COLOR_RESET)"
+	@read confirm
+	helm upgrade $(HELM_RELEASE) $(HELM_CHART) \
+		--install \
+		--namespace lists-viewer \
+		--create-namespace \
+		--values $(HELM_CHART)/values-prod.yaml \
+		--set image.repository=$(IMAGE_NAME) \
+		--set image.tag=$(IMAGE_TAG) \
+		--set image.pullPolicy=Never
+	@echo "$(COLOR_SUCCESS)✓ ARM64 deployed to production$(COLOR_RESET)"
 
 .PHONY: deploy-local-dev
 deploy-local-dev: docker-build docker-push ## Deploy to local development (with registry push)

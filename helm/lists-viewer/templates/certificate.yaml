@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: checklist-tls
+spec:
+  commonName: checklist.local.private
+  dnsNames:
+    - checklist.local.private
+  duration: 2160h
+  issuerRef:
+    kind: ClusterIssuer
+    name: internal-ca-issuer
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  renewBefore: 360h
+  secretName: checklist-tls
