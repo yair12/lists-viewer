@@ -258,6 +258,36 @@ deploy-dev-arm64: deploy-image-arm64 ## Deploy ARM64 image to development enviro
 		--set image.pullPolicy=Never
 	@echo "$(COLOR_SUCCESS)✓ ARM64 deployed to development$(COLOR_RESET)"
 
+.PHONY: update-deployed-version
+update-deployed-version: ## Update DEPLOYED_VERSION file with current deployment info
+	@echo "$(COLOR_INFO)Updating DEPLOYED_VERSION file...$(COLOR_RESET)"
+	@echo "# Last Deployed Version" > DEPLOYED_VERSION
+	@echo "# This file tracks the version currently deployed to production" >> DEPLOYED_VERSION
+	@echo "" >> DEPLOYED_VERSION
+	@echo "PRODUCTION_VERSION=$(IMAGE_TAG)" >> DEPLOYED_VERSION
+	@echo "DEPLOYED_DATE=$$(date +%Y-%m-%d)" >> DEPLOYED_VERSION
+	@echo "DEPLOYED_BY=$$(whoami)" >> DEPLOYED_VERSION
+	@echo "TARGET_HOST=$(REMOTE_HOST)" >> DEPLOYED_VERSION
+	@echo "$(COLOR_SUCCESS)✓ DEPLOYED_VERSION updated$(COLOR_RESET)"
+
+.PHONY: get-next-version
+get-next-version: ## Get next version by incrementing current version
+	@if [ -f DEPLOYED_VERSION ]; then \
+		CURRENT_VERSION=$$(grep "PRODUCTION_VERSION=" DEPLOYED_VERSION | cut -d'=' -f2); \
+		if [ -z "$$CURRENT_VERSION" ] || [ "$$CURRENT_VERSION" = "latest" ]; then \
+			echo "v1.0.1"; \
+		else \
+			VERSION_NUM=$$(echo $$CURRENT_VERSION | sed 's/v//'); \
+			MAJOR=$$(echo $$VERSION_NUM | cut -d'.' -f1); \
+			MINOR=$$(echo $$VERSION_NUM | cut -d'.' -f2); \
+			PATCH=$$(echo $$VERSION_NUM | cut -d'.' -f3); \
+			NEW_PATCH=$$((PATCH + 1)); \
+			echo "v$$MAJOR.$$MINOR.$$NEW_PATCH"; \
+		fi; \
+	else \
+		echo "v1.0.1"; \
+	fi
+
 .PHONY: deploy-prod
 deploy-prod: deploy-image ## Deploy to production environment
 	@echo "$(COLOR_WARNING)Deploying to PRODUCTION on $(REMOTE_HOST)...$(COLOR_RESET)"
@@ -272,6 +302,7 @@ deploy-prod: deploy-image ## Deploy to production environment
 		--set image.repository=$(DOCKER_REGISTRY)/$(IMAGE_NAME) \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Never"
+	@$(MAKE) update-deployed-version
 	@echo "$(COLOR_SUCCESS)✓ Deployed to production$(COLOR_RESET)"
 
 .PHONY: deploy-prod-arm64
@@ -287,6 +318,7 @@ deploy-prod-arm64: deploy-image-arm64 ## Deploy ARM64 image to production enviro
 		--set image.repository=$(IMAGE_NAME) \
 		--set image.tag=$(IMAGE_TAG) \
 		--set image.pullPolicy=Never
+	@$(MAKE) update-deployed-version
 	@echo "$(COLOR_SUCCESS)✓ ARM64 deployed to production$(COLOR_RESET)"
 
 .PHONY: deploy-local-dev
