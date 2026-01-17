@@ -14,12 +14,12 @@ IMAGE_TAG ?= latest
 FULL_IMAGE := $(DOCKER_REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
 
 # Remote server configuration
-REMOTE_HOST ?= 
-REMOTE_USER ?= root
+REMOTE_HOST ?= main.server.local.private
+REMOTE_USER ?= echelon
 REMOTE_PORT ?= 22
 
 HELM_RELEASE ?= lists-viewer
-HELM_NAMESPACE ?= default
+HELM_NAMESPACE ?= lists-viewer
 HELM_CHART := ./helm/lists-viewer
 
 # Colors for output
