@@ -15,7 +15,7 @@ import { CheckBox, List as ListIcon } from '@mui/icons-material';
 import { useState, useEffect, useMemo } from 'react';
 import { QUANTITY_TYPES, USER_STORAGE_KEY } from '../../utils/constants';
 import { useCreateItem, useUpdateItem, useItems } from '../../hooks/useItems';
-import type { CreateItemRequest } from '../../types';
+import type { CreateItemRequest, Item } from '../../types';
 import DuplicateItemDialog from '../Common/DuplicateItemDialog';
 
 interface CreateItemDialogProps {

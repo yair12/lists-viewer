@@ -274,21 +274,17 @@ export class QueueProcessor {
           if (parentId) {
             const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
             
-            // For CREATE operations, the resourceId is a temp ID, but result has the real server ID
-            // We need to remove the temp item and add the new one
-            const isCreateOperation = operation.operationType === 'CREATE';
-            
             let updatedItems: Item[];
             if (isCreateOperation) {
-              // Remove temp item and add server item
+              // For CREATE: Remove temp item and add server item
               updatedItems = [
                 ...currentItems.filter((item: Item) => item.id !== resourceId),
                 { ...result, pending: false }
               ];
             } else {
-              // For UPDATE, just replace the item with matching ID
+              // For UPDATE: Replace the item with matching ID, preserve order
               updatedItems = currentItems.map((item: Item) => 
-                item.id === resourceId ? { ...result, pending: false } : item
+                item.id === result.id ? { ...result, pending: false } : item
               );
             }
             
