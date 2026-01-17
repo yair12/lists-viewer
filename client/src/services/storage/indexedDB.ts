@@ -328,3 +328,8 @@ export const closeDB = (): void => {
     dbInstance = null;
   }
 };
+
+// Expose for dev/test access
+if (typeof window !== 'undefined') {
+  (window as any).__openDB = initDB;
+}

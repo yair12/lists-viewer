@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual Test - Console Logs</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        h1 { color: #333; }
+        p { color: #666; }
+        iframe { width: 100%; height: 800px; border: 2px solid #333; }
+    </style>
+</head>
+<body>
+    <h1>Manual Test - Check Browser Console</h1>
+    <p>Open Browser DevTools (F12) and go to Console tab to see all console.log statements.</p>
+    <p>Then navigate in the iframe below:</p>
+    <ol>
+        <li>Click "Click to go OFFLINE (testing)" button at bottom-right</li>
+        <li>Click on the "Offline Test List" in sidebar</li>
+        <li>Click "Add Item" button</li>
+        <li>Fill in "Offline Item 1" in Name field</li>
+        <li>Click "Add" or press Enter</li>
+        <li>Check console for [CreateItemDialog], [useCreateItem], [IndexedDB], etc. logs</li>
+    </ol>
+    <iframe src="http://localhost:5173" title="Lists Viewer"></iframe>
+</body>
+</html>

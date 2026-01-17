@@ -6,6 +6,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './services/api/queryClient';
 import { initDB } from './services/storage/indexedDB';
 import { syncManager } from './services/offline/syncManager';
+import { queueProcessor } from './services/offline/queueProcessor';
+import { SyncDialogsProvider } from './services/offline/syncDialogsStore';
 import { darkTheme } from './styles/theme';
 import { USER_STORAGE_KEY } from './utils/constants';
 import Onboarding from './pages/Onboarding';
@@ -54,6 +56,10 @@ function App() {
         
         // Start sync manager
         console.log('[App] Sync manager initialized and listening for network changes');
+        
+        // Start queue processor for background sync
+        queueProcessor.start();
+        console.log('[App] Queue processor started');
       } catch (error) {
         console.error('[App] Failed to initialize:', error);
       }
@@ -92,24 +98,26 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider theme={darkTheme}>
-        <CssBaseline />
-        {!user ? (
-          <Onboarding onComplete={handleOnboardingComplete} />
-        ) : (
-          <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/lists/:listId" element={<ListView />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </BrowserRouter>
-        )}
-        {/* Development-only offline testing toggle */}
-        <OfflineToggle />
-        {/* Service worker update notification */}
-        <ServiceWorkerUpdateNotification />
-      </ThemeProvider>
+      <SyncDialogsProvider>
+        <ThemeProvider theme={darkTheme}>
+          <CssBaseline />
+          {!user ? (
+            <Onboarding onComplete={handleOnboardingComplete} />
+          ) : (
+            <BrowserRouter>
+              <Routes>
+                <Route path="/" element={<Home />} />
+                <Route path="/lists/:listId" element={<ListView />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </BrowserRouter>
+          )}
+          {/* Development-only offline testing toggle */}
+          <OfflineToggle />
+          {/* Service worker update notification */}
+          <ServiceWorkerUpdateNotification />
+        </ThemeProvider>
+      </SyncDialogsProvider>
     </QueryClientProvider>
   );
 }

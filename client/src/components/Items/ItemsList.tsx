@@ -104,6 +104,7 @@ export default function ItemsList({ listId, listColor }: ItemsListProps) {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
+            data-testid="add-item-button"
           >
             Add Item
           </Button>

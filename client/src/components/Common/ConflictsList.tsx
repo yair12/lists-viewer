@@ -51,6 +51,12 @@ export const ConflictsList: React.FC = () => {
     }
   };
 
+  const handleSimpleResolve = (choice: 'local' | 'server') => {
+    // Map simple choice to full strategy
+    const strategyMap = { local: 'use_local' as const, server: 'use_server' as const };
+    handleResolve(strategyMap[choice]);
+  };
+
   if (conflictCount === 0) {
     return null;
   }
@@ -144,9 +150,11 @@ export const ConflictsList: React.FC = () => {
       </Card>
 
       <ConflictDialog
-        open={dialogOpen}
-        conflict={selectedConflict}
-        onResolve={handleResolve}
+        open={dialogOpen && !!selectedConflict}
+        resourceType={selectedConflict?.queueItem.resourceType || 'ITEM'}
+        localVersion={selectedConflict?.localVersion!}
+        serverVersion={selectedConflict?.serverVersion!}
+        onResolve={handleSimpleResolve}
         onClose={() => setDialogOpen(false)}
       />
     </>

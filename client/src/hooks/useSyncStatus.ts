@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { getPendingSyncItems } from '../services/storage/syncQueue';
 import { syncManager } from '../services/offline/syncManager';
+import { queryKeys } from '../services/api/queryClient';
 
 /**
  * Hook to check if a specific item has pending sync operations
@@ -19,6 +20,10 @@ export const useItemPendingSync = (itemId: string) => {
       if (syncedItemId === itemId && resourceType === 'ITEM') {
         // Invalidate this specific query so it refetches
         queryClient.invalidateQueries({ queryKey: ['sync-status', 'item', itemId] });
+        
+        // Also invalidate the items cache to refresh the item data and clear pending flag
+        // We don't know the listId here, so invalidate all items queries
+        queryClient.invalidateQueries({ queryKey: queryKeys.items.all });
       }
     });
 

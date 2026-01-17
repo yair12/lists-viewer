@@ -1,0 +1,24 @@
+{
+  "name": "lists-viewer",
+  "version": "1.0.0",
+  "description": "A Progressive Web App (PWA) for managing todo lists and checklists with offline-first support, collaborative features, and a native-like experience.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yair12/lists-viewer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yair12/lists-viewer/issues"
+  },
+  "homepage": "https://github.com/yair12/lists-viewer#readme",
+  "devDependencies": {
+    "@types/node": "^25.0.3"
+  }
+}

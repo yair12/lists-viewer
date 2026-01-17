@@ -10,7 +10,10 @@ import EditListDialog from '../components/Lists/EditListDialog';
 import ConfirmDialog from '../components/Common/ConfirmDialog';
 import { listsApi } from '../services/api/lists';
 import { itemsApi } from '../services/api/items';
+import { queryKeys } from '../services/api/queryClient';
 import { useList } from '../hooks/useLists';
+import { useReorderItems } from '../hooks/useItems';
+import type { Item } from '../types';
 
 export default function ListView() {
   const { listId } = useParams<{ listId: string }>();
@@ -21,6 +24,7 @@ export default function ListView() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const { data: list, isLoading } = useList(listId!);
+  const reorderMutation = useReorderItems();
 
   const deleteMutation = useMutation({
     mutationFn: () => listsApi.delete(listId!, list?.version || 1),
@@ -35,9 +39,15 @@ export default function ListView() {
   };
 
   const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
+    try {
+      console.log('[ListView] handleDragEnd called', result);
+      if (!result.destination) {
+        console.log('[ListView] No destination, returning');
+        return;
+      }
 
-    const { source, destination } = result;
+      const { source, destination } = result;
+      console.log('[ListView] source:', source, 'destination:', destination);
 
     // Check if dropping on a sidebar list
     if (destination.droppableId.startsWith('sidebar-list-')) {
@@ -45,7 +55,7 @@ export default function ListView() {
       const itemId = result.draggableId;
 
       // Get the item being moved - use optional chaining
-      const items = queryClient.getQueryData<any[]>(['items', listId]);
+      const items = queryClient.getQueryData<any[]>(queryKeys.items.byList(listId!));
       const item = items?.find((i: any) => i.id === itemId);
       
       if (item && targetListId !== listId) {
@@ -55,8 +65,8 @@ export default function ListView() {
           order: 0,
           version: item.version,
         }).then(() => {
-          queryClient.invalidateQueries({ queryKey: ['items', listId] });
-          queryClient.invalidateQueries({ queryKey: ['items', targetListId] });
+          queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(listId!) });
+          queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(targetListId) });
           queryClient.invalidateQueries({ queryKey: ['lists'] });
         }).catch((error) => {
           console.error('Error moving item:', error);
@@ -64,30 +74,58 @@ export default function ListView() {
       }
     } else if (destination.droppableId === 'items-list' && source.droppableId === 'items-list') {
       // Reordering within the same list
-      const items = queryClient.getQueryData<any[]>(['items', listId]);
-      if (!items) return;
+      console.log('[ListView] Reordering items in same list');
+      const items = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId!));
+      console.log('[ListView] Got items from cache:', items?.length, 'items');
+      if (!items) {
+        console.warn('[ListView] handleDragEnd - no items found in cache');
+        return;
+      }
 
       const sourceIndex = source.index;
       const destIndex = destination.index;
 
-      if (sourceIndex === destIndex) return;
+      if (sourceIndex === destIndex) {
+        console.log('[ListView] handleDragEnd - source and dest index are the same, skipping');
+        return;
+      }
 
-      // Create a new array with reordered items
-      const reorderedItems = Array.from(items);
-      const [removed] = reorderedItems.splice(sourceIndex, 1);
-      reorderedItems.splice(destIndex, 0, removed);
+      // Only work with open (non-completed) items
+      const openItems = items.filter(item => !item.completed);
+      console.log('[ListView] handleDragEnd - reordering', openItems.length, 'open items');
+      console.log('[ListView] Original order:', openItems.map(i => i.name));
+      
+      // Reorder the open items
+      const reorderedOpenItems = Array.from(openItems);
+      const [removed] = reorderedOpenItems.splice(sourceIndex, 1);
+      reorderedOpenItems.splice(destIndex, 0, removed);
 
-      // Update the order in the backend
-      const reorderPayload = reorderedItems.map((item: any, index: number) => ({
+      console.log('[ListView] After drag order:', reorderedOpenItems.map(i => i.name));
+
+      // Filter out pending items (with temporary IDs) from the reorder payload
+      // Only send items that have been synced to the server
+      const syncedItems = reorderedOpenItems.filter(item => !item.pending);
+      
+      if (syncedItems.length === 0) {
+        console.log('[ListView] No synced items to reorder - skipping');
+        return;
+      }
+
+      // Prepare the reorder payload - only send synced items with new orders
+      const reorderPayload = syncedItems.map((item, index) => ({
         id: item.id,
         order: index,
       }));
 
-      itemsApi.reorder(listId!, { items: reorderPayload }).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['items', listId] });
-      }).catch((error) => {
-        console.error('Error reordering items:', error);
+      console.log('[ListView] Calling reorderMutation.mutate with', reorderPayload.length, 'items');
+      // Use the hook with offline support (it handles optimistic updates)
+      reorderMutation.mutate({
+        listId: listId!,
+        data: { items: reorderPayload }
       });
+    }
+    } catch (error) {
+      console.error('[ListView] Error in handleDragEnd:', error);
     }
   };
 

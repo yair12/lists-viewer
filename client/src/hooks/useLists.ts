@@ -2,12 +2,15 @@
  * Custom hooks for lists data fetching and mutations
  */
 
+import { v4 as uuidv4 } from 'uuid';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listsApi } from '../services/api/lists';
 import { queryKeys } from '../services/api/queryClient';
 import { isNetworkError } from '../services/api/client';
 import { addToSyncQueue, getResourcesWithPendingDelete } from '../services/storage/syncQueue';
+import { queueProcessor } from '../services/offline/queueProcessor';
 import { cacheList, cacheLists, getCachedLists, removeCachedList } from '../services/storage/cacheManager';
+import { STORES, putItem } from '../services/storage/indexedDB';
 import type { List, CreateListRequest, UpdateListRequest } from '../types';
 
 /**
@@ -104,47 +107,43 @@ export const useCreateList = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async (data: CreateListRequest) => {
-      try {
-        console.log('[useCreateList] 🌐 Making API call...');
-        const newList = await listsApi.create(data);
-        await cacheList(newList);
-        console.log('[useCreateList] ✅ Created online');
-        return newList;
-      } catch (error) {
-        if (isNetworkError(error)) {
-          console.log('[useCreateList] 🔴 Network error - creating offline');
-          
-          // Create temporary list with pending status
-          const tempList: List = {
-            id: `temp-${Date.now()}`,
-            name: data.name,
-            description: data.description,
-            color: data.color,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            createdBy: 'temp',
-            updatedBy: 'temp',
-            version: 0,
-            itemCount: 0,
-            completedItemCount: 0,
-          };
+      console.log('[useCreateList] Creating list offline-first');
+      
+      // Generate unique ID for optimistic list
+      const tempId = uuidv4();
+      const optimisticList: List = {
+        id: tempId,
+        name: data.name,
+        description: data.description,
+        color: data.color,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        createdBy: 'pending',
+        updatedBy: 'pending',
+        version: 1,
+        itemCount: 0,
+        completedItemCount: 0,
+        pending: true, // Mark as pending sync
+      };
 
-          // Cache temporary list
-          await cacheList(tempList);
+      // 1. Save to IndexedDB
+      await putItem(STORES.LISTS, optimisticList);
 
-          // Add to sync queue
-          await addToSyncQueue('CREATE', 'LIST', tempList.id, data, 0);
+      // 2. Add to sync queue
+      await addToSyncQueue('CREATE', 'LIST', tempId, data, 1);
+      queueProcessor.trigger();
 
-          return tempList;
-        }
-        throw error;
-      }
+      // 3. Optimistic update in React Query cache
+      const currentLists = queryClient.getQueryData<List[]>(queryKeys.lists.all) || [];
+      queryClient.setQueryData(queryKeys.lists.all, [...currentLists, optimisticList]);
+      queryClient.setQueryData(queryKeys.lists.detail(tempId), optimisticList);
+
+      console.log('[useCreateList] ✅ List queued for sync:', tempId);
+      return optimisticList;
     },
-    onSuccess: () => {
-      // Invalidate lists query to refetch
-      queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
-    },
+    // No onSuccess needed - optimistic update already done
   });
 };
 
@@ -155,57 +154,50 @@ export const useUpdateList = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async ({ listId, data }: { listId: string; data: UpdateListRequest }) => {
-      (window as any).__mutationInProgress = true;
-      try {
-        console.log('[useUpdateList] 🌐 Making API call...');
-        const updatedList = await listsApi.update(listId, data);
-        await cacheList(updatedList);
-        console.log('[useUpdateList] ✅ Updated online');
-        return updatedList;
-      } catch (error) {
-        if (isNetworkError(error)) {
-          console.log('[useUpdateList] 🔴 Network error - updating offline');
-          
-          // Optimistically update cache
-          const cachedLists = await getCachedLists();
-          const existingList = cachedLists.find(l => l.id === listId);
-          
-          if (existingList) {
-            const updatedList: List = {
-              ...existingList,
-              name: data.name,
-              description: data.description,
-              color: data.color,
-              updatedAt: new Date().toISOString(),
-              version: data.version,
-            };
-            
-            await cacheList(updatedList);
-            await addToSyncQueue('UPDATE', 'LIST', listId, data, data.version);
-            
-            return updatedList;
-          }
-        }
-        throw error;
+      console.log('[useUpdateList] Updating list offline-first');
+      
+      // Get existing list from React Query cache or IndexedDB
+      let existingList = queryClient.getQueryData<List>(queryKeys.lists.detail(listId));
+      
+      if (!existingList) {
+        const cachedLists = await getCachedLists();
+        existingList = cachedLists.find(l => l.id === listId);
       }
+      
+      if (!existingList) {
+        throw new Error(`List ${listId} not found in cache`);
+      }
+
+      // Create updated list with pending flag
+      const updatedList: List = {
+        ...existingList,
+        name: data.name ?? existingList.name,
+        description: data.description ?? existingList.description,
+        color: data.color ?? existingList.color,
+        updatedAt: new Date().toISOString(),
+        version: data.version,
+        pending: true, // Mark as pending sync
+      };
+      
+      // 1. Save to IndexedDB
+      await putItem(STORES.LISTS, updatedList);
+      
+      // 2. Add to sync queue
+      await addToSyncQueue('UPDATE', 'LIST', listId, data, data.version);
+      queueProcessor.trigger();
+      
+      // 3. Optimistic update in React Query cache
+      queryClient.setQueryData(queryKeys.lists.detail(listId), updatedList);
+      const currentLists = queryClient.getQueryData<List[]>(queryKeys.lists.all) || [];
+      const updatedLists = currentLists.map(list => list.id === listId ? updatedList : list);
+      queryClient.setQueryData(queryKeys.lists.all, updatedLists);
+      
+      console.log('[useUpdateList] ✅ List queued for sync');
+      return updatedList;
     },
-    onSuccess: (data) => {
-      console.log('[useUpdateList] ✅ onSuccess - updating queries with:', data);
-      // Update cached queries immediately with the returned data
-      queryClient.setQueryData(queryKeys.lists.detail(data.id), data);
-      queryClient.setQueryData(queryKeys.lists.all, (old: List[] | undefined) => {
-        if (!old) return [data];
-        return old.map(list => list.id === data.id ? data : list);
-      });
-      // Also invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
-      queryClient.invalidateQueries({ queryKey: queryKeys.lists.detail(data.id) });
-    },
-    onSettled: () => {
-      // Clear mutation flag after mutation completes (success or error)
-      (window as any).__mutationInProgress = false;
-    },
+    // No onSuccess needed - optimistic update already done
   });
 };
 
@@ -216,32 +208,27 @@ export const useDeleteList = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
+    networkMode: 'offlineFirst',
     mutationFn: async ({ listId, version }: { listId: string; version: number }) => {
-      try {
-        await listsApi.delete(listId, version);
-        // Only remove from cache after successful API call
-        await removeCachedList(listId);
-        console.log('[useDeleteList] ✅ Deleted from server and removed from cache:', listId);
-        return { success: true, listId };
-      } catch (error) {
-        // If network error, add to sync queue but DON'T remove from cache yet
-        if (isNetworkError(error)) {
-          console.log('[useDeleteList] Network error, adding to sync queue (keeping in cache)');
-          await addToSyncQueue('DELETE', 'LIST', listId, { version }, version);
-          return { success: false, listId };
-        }
-        throw error;
-      }
+      console.log('[useDeleteList] Deleting list offline-first');
+      
+      // 1. Add to sync queue (delete will happen when synced)
+      await addToSyncQueue('DELETE', 'LIST', listId, { version }, version);
+      queueProcessor.trigger();
+      
+      // 2. Remove from IndexedDB and caches immediately
+      await removeCachedList(listId);
+      
+      // 3. Optimistically remove from React Query cache
+      const currentLists = queryClient.getQueryData<List[]>(queryKeys.lists.all) || [];
+      const filteredLists = currentLists.filter(list => list.id !== listId);
+      queryClient.setQueryData(queryKeys.lists.all, filteredLists);
+      queryClient.removeQueries({ queryKey: queryKeys.lists.detail(listId) });
+      queryClient.removeQueries({ queryKey: queryKeys.items.byList(listId) });
+      
+      console.log('[useDeleteList] ✅ List queued for deletion');
+      return { listId };
     },
-    onSuccess: async (_, variables) => {
-      // Remove from cache and invalidate queries immediately
-      queryClient.removeQueries({ queryKey: queryKeys.lists.detail(variables.listId) });
-      // Also remove all items for this list
-      queryClient.removeQueries({ queryKey: queryKeys.items.byList(variables.listId) });
-      // Invalidate and refetch to ensure fresh data
-      await queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
-      await queryClient.refetchQueries({ queryKey: queryKeys.lists.all });
-      console.log('[useDeleteList] ✅ Queries removed, invalidated and refetched');
-    },
+    // No onSuccess needed - optimistic update already done
   });
 };

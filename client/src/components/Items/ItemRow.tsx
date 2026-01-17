@@ -46,7 +46,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
   // Check if this item has pending sync operations
   const { data: isPendingSync = false } = useItemPendingSync(item.id);
   const isTempId = item.id.startsWith('temp-');
-  const showPendingIndicator = isTempId || isPendingSync;
+  const showPendingIndicator = isTempId || isPendingSync || item.pending;
 
   // Get icon URL for the item's creator
   const userIcon = icons.find(icon => icon.id === item.userIconId);
@@ -124,6 +124,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
   return (
     <Box
       onClick={handleRowClick}
+      data-item-id={item.id}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -148,6 +149,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
           onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
           disabled={updateMutation.isPending}
+          data-testid="item-checkbox"
           sx={{
             '& .MuiSvgIcon-root': { 
               fontSize: { xs: 32, sm: 28 } // Larger on mobile
@@ -221,6 +223,7 @@ export default function ItemRow({ item, listId, listColor }: ItemRowProps) {
           e.stopPropagation();
           setMenuAnchor(e.currentTarget);
         }}
+        data-testid="item-menu-button"
       >
         <MoreVertIcon fontSize="small" />
       </IconButton>

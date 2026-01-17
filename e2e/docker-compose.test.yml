@@ -1,0 +1,42 @@
+services:
+  mongodb:
+    image: mongo:5.0
+    container_name: lists-viewer-test-mongo
+    environment:
+      MONGO_INITDB_DATABASE: lists_viewer_test
+    ports:
+      - "27017:27017"
+    networks:
+      - test-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh --quiet
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  server:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    container_name: lists-viewer-test-server
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/lists_viewer_test?directConnection=true
+      PORT: 8080
+      GIN_MODE: release
+    ports:
+      - "8080:8080"
+    networks:
+      - test-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+networks:
+  test-network:
+    driver: bridge

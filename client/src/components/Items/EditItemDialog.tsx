@@ -10,8 +10,9 @@ import {
 } from '@mui/material';
 import { useState, useEffect } from 'react';
 import { QUANTITY_TYPES } from '../../utils/constants';
-import { useUpdateItem } from '../../hooks/useItems';
+import { useUpdateItem, useItems } from '../../hooks/useItems';
 import type { Item, UpdateItemRequest } from '../../types';
+import DuplicateItemDialog from '../Common/DuplicateItemDialog';
 
 interface EditItemDialogProps {
   open: boolean;
@@ -25,7 +26,14 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
   const [description, setDescription] = useState(item.description || '');
   const [quantity, setQuantity] = useState(item.quantity?.toString() || '');
   const [quantityType, setQuantityType] = useState<string>(item.quantityType || QUANTITY_TYPES[0]);
+  const [capturedVersion, setCapturedVersion] = useState(item.version);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<UpdateItemRequest | null>(null);
+  
   const updateMutation = useUpdateItem();
+  
+  // Fetch existing items to check for duplicates
+  const { data: existingItems = [] } = useItems(listId);
 
   useEffect(() => {
     if (open) {
@@ -33,8 +41,42 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
       setDescription(item.description || '');
       setQuantity(item.quantity?.toString() || '');
       setQuantityType(item.quantityType || QUANTITY_TYPES[0]);
+      // Capture version when dialog opens - don't update it even if item changes
+      setCapturedVersion(item.version);
+      setShowDuplicateDialog(false);
+      setPendingPayload(null);
     }
   }, [open, item]);
+
+  const checkForDuplicates = (itemName: string) => {
+    const trimmedName = itemName.trim().toLowerCase();
+    return existingItems.filter(
+      (existingItem) => 
+        existingItem.id !== item.id && // Exclude current item
+        existingItem.name.toLowerCase() === trimmedName && 
+        !existingItem.completed
+    );
+  };
+
+  const handleDuplicateResolve = (choice: 'use-existing' | 'override' | 'cancel') => {
+    setShowDuplicateDialog(false);
+    
+    if (choice === 'override' && pendingPayload) {
+      updateMutation.mutate(
+        { listId, itemId: item.id, data: pendingPayload },
+        {
+          onSettled: () => {
+            onClose();
+          },
+        }
+      );
+      setPendingPayload(null);
+    } else if (choice === 'use-existing') {
+      // Just close the dialog - don't update
+      onClose();
+    }
+    // If cancel, do nothing - just close duplicate dialog
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,11 +84,21 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
 
     const payload: UpdateItemRequest = {
       name: name.trim(),
-      version: item.version,
+      version: capturedVersion, // Use the captured version, not item.version
       ...(item.type === 'list' && description && { description: description.trim() }),
       ...(item.type === 'item' && quantity && { quantity: parseFloat(quantity) }),
       ...(item.type === 'item' && quantity && { quantityType }),
     };
+
+    // Check for duplicates only if name changed (only for items, not nested lists)
+    if (item.type === 'item' && name.trim().toLowerCase() !== item.name.toLowerCase()) {
+      const duplicates = checkForDuplicates(name);
+      if (duplicates.length > 0) {
+        setPendingPayload(payload);
+        setShowDuplicateDialog(true);
+        return;
+      }
+    }
 
     updateMutation.mutate(
       { listId, itemId: item.id, data: payload },
@@ -75,6 +127,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
               required
               autoFocus
               disabled={updateMutation.isPending}
+              inputProps={{ 'data-testid': 'edit-item-name-input' }}
             />
 
             {item.type === 'list' && (
@@ -96,7 +149,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
                   value={quantity}
                   onChange={(e) => setQuantity(e.target.value)}
                   type="number"
-                  inputProps={{ min: 0, step: 0.01 }}
+                  inputProps={{ min: 0, step: 0.01, 'data-testid': 'edit-item-quantity-input' }}
                   sx={{ flex: 1 }}
                   disabled={updateMutation.isPending}
                 />
@@ -126,11 +179,21 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
             type="submit"
             variant="contained"
             disabled={updateMutation.isPending || !name.trim()}
+            data-testid="edit-item-submit"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </DialogActions>
       </form>
+
+      {/* Duplicate Item Dialog */}
+      <DuplicateItemDialog
+        open={showDuplicateDialog}
+        itemName={name}
+        existingItems={checkForDuplicates(name)}
+        onResolve={handleDuplicateResolve}
+        onClose={() => setShowDuplicateDialog(false)}
+      />
     </Dialog>
   );
 }
