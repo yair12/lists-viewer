@@ -1,21 +1,21 @@
 # Production environment overrides
-replicaCount: 3
+replicaCount: 2
 
 image:
   tag: "latest"
 
 resources:
   limits:
-    cpu: 1000m
-    memory: 1Gi
+    cpu: 200m
+    memory: 256Mi
   requests:
-    cpu: 500m
-    memory: 512Mi
+    cpu: 100m
+    memory: 128Mi
 
 autoscaling:
   enabled: true
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 2
+  maxReplicas: 2
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 75
 
@@ -36,4 +36,4 @@ ingress:
 
 # Production MongoDB URI with replica set
 mongodb:
-  uri: "mongodb://root:password@mongodb-0,mongodb-1,mongodb-2/lists_viewer?authSource=admin&replicaSet=rs0"
+  uri: "mongodb://mongodb.mongodb.svc.cluster.local:27017/lists_viewer?authSource=admin"
