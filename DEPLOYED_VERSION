@@ -1,0 +1,7 @@
+# Last Deployed Version
+# This file tracks the version currently deployed to production
+
+PRODUCTION_VERSION=v1.0.7
+DEPLOYED_DATE=2026-01-17
+DEPLOYED_BY=echelon
+TARGET_HOST=main.server.local.private
