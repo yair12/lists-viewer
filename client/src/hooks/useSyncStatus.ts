@@ -17,9 +17,7 @@ export const useItemPendingSync = (itemId: string) => {
   // Listen to sync events and invalidate when this item is synced
   useEffect(() => {
     const unsubscribe = syncManager.addItemSyncedListener((syncedItemId, resourceType) => {
-      console.log(`[useSyncStatus] 📢 Item synced event: ${syncedItemId}, type: ${resourceType}`);
       if (syncedItemId === itemId && resourceType === 'ITEM') {
-        console.log(`[useSyncStatus] ✅ Invalidating queries for item: ${itemId}`);
         // Invalidate this specific query so it refetches
         queryClient.invalidateQueries({ queryKey: ['sync-status', 'item', itemId] });
         
@@ -36,11 +34,9 @@ export const useItemPendingSync = (itemId: string) => {
     queryKey: ['sync-status', 'item', itemId],
     queryFn: async () => {
       const pendingItems = await getPendingSyncItems();
-      const hasPending = pendingItems.some(item => 
+      return pendingItems.some(item => 
         item.resourceType === 'ITEM' && item.resourceId === itemId
       );
-      console.log(`[useSyncStatus] Query result for ${itemId}: hasPending=${hasPending}, queueLength=${pendingItems.length}`);
-      return hasPending;
     },
     refetchInterval: 2000, // Check every 2 seconds as fallback
     staleTime: 0, // Always consider stale to refetch

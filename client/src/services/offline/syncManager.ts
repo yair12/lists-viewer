@@ -81,7 +81,6 @@ class SyncManager {
    * Notify when an item has been synced
    */
   private notifyItemSynced(itemId: string, resourceType: 'LIST' | 'ITEM'): void {
-    console.log(`[SyncManager] 🔔 Notifying listeners: ${resourceType} ${itemId} synced`);
     this.itemSyncedListeners.forEach((listener) => {
       try {
         listener(itemId, resourceType);
@@ -278,8 +277,6 @@ class SyncManager {
         );
         queryClient.setQueryData(queryKeys.items.byList(listId), updatedItems);
         queryClient.setQueryData(queryKeys.items.detail(listId, resourceId), itemWithoutPending);
-        
-        console.log(`[SyncManager] 🔄 Updated React Query cache for item ${resourceId}, pending=false`);
         break;
       }
       case 'DELETE': {
