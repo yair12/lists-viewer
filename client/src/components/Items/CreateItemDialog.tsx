@@ -14,8 +14,9 @@ import {
 import { CheckBox, List as ListIcon } from '@mui/icons-material';
 import { useState, useEffect, useMemo } from 'react';
 import { QUANTITY_TYPES, USER_STORAGE_KEY } from '../../utils/constants';
-import { useCreateItem } from '../../hooks/useItems';
+import { useCreateItem, useUpdateItem, useItems } from '../../hooks/useItems';
 import type { CreateItemRequest } from '../../types';
+import DuplicateItemDialog from '../Common/DuplicateItemDialog';
 
 interface CreateItemDialogProps {
   open: boolean;
@@ -29,6 +30,12 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
   const [description, setDescription] = useState('');
   const [quantity, setQuantity] = useState('');
   const [quantityType, setQuantityType] = useState<string>(QUANTITY_TYPES[0]);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<CreateItemRequest | null>(null);
+  const [duplicateItems, setDuplicateItems] = useState<Item[]>([]);
+
+  // Fetch existing items to check for duplicates
+  const { data: existingItems = [] } = useItems(listId);
 
   // Memoize user to prevent re-reads on every render
   const user = useMemo(() => {
@@ -37,13 +44,14 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
   }, []);
 
   const createMutation = useCreateItem();
+  const updateMutation = useUpdateItem();
 
   // Close dialog when mutation succeeds
   useEffect(() => {
-    if (createMutation.isSuccess) {
+    if ((createMutation.isSuccess || updateMutation.isSuccess) && open) {
       handleClose();
     }
-  }, [createMutation.isSuccess]);
+  }, [createMutation.isSuccess, updateMutation.isSuccess, open]);
 
   const handleClose = () => {
     setType('item');
@@ -51,7 +59,43 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
     setDescription('');
     setQuantity('');
     setQuantityType(QUANTITY_TYPES[0]);
+    setShowDuplicateDialog(false);
+    setPendingPayload(null);
+    setDuplicateItems([]);
+    createMutation.reset();
+    updateMutation.reset();
     onClose();
+  };
+
+  const checkForDuplicates = (itemName: string) => {
+    const trimmedName = itemName.trim().toLowerCase();
+    return existingItems.filter(
+      (item) => item.name.toLowerCase() === trimmedName && !item.completed
+    );
+  };
+
+  const handleDuplicateResolve = (choice: 'use-existing' | 'override' | 'cancel') => {
+    setShowDuplicateDialog(false);
+    
+    if (choice === 'override' && pendingPayload && duplicateItems.length > 0) {
+      // Override the first duplicate item with the new values
+      const itemToUpdate = duplicateItems[0];
+      updateMutation.mutate({
+        listId,
+        itemId: itemToUpdate.id,
+        data: {
+          ...pendingPayload,
+          version: itemToUpdate.version,
+        },
+      });
+      // Don't clear pendingPayload yet - let the success handler do it
+    } else if (choice === 'use-existing') {
+      // Just close the dialog - the existing item is already there
+      handleClose();
+    } else {
+      // Cancel - just clear the pending payload
+      setPendingPayload(null);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -66,6 +110,17 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
       ...(type === 'item' && quantity && { quantityType }),
       ...(user && { userIconId: user.iconId }),
     };
+
+    // Check for duplicates (only for items, not nested lists)
+    if (type === 'item') {
+      const duplicates = checkForDuplicates(name);
+      if (duplicates.length > 0) {
+        setPendingPayload(payload);
+        setDuplicateItems(duplicates); // Store duplicates to avoid re-calculating
+        setShowDuplicateDialog(true);
+        return;
+      }
+    }
 
     createMutation.mutate({ listId, data: payload });
   };
@@ -157,6 +212,15 @@ export default function CreateItemDialog({ open, onClose, listId }: CreateItemDi
           </Button>
         </DialogActions>
       </form>
+
+      {/* Duplicate Item Dialog */}
+      <DuplicateItemDialog
+        open={showDuplicateDialog}
+        itemName={name}
+        existingItems={duplicateItems}
+        onResolve={handleDuplicateResolve}
+        onClose={() => setShowDuplicateDialog(false)}
+      />
     </Dialog>
   );
 }

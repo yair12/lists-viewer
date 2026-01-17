@@ -7,7 +7,7 @@ import {
   removeSyncItem,
   type SyncQueueItem,
 } from '../storage/syncQueue';
-import { STORES, getItem, putItem } from '../storage/indexedDB';
+import { STORES, getItem, putItem, deleteItem } from '../storage/indexedDB';
 import { getSyncDialogsInstance } from './syncDialogsStore';
 import { queryClient, queryKeys } from '../api/queryClient';
 import type { Item, List } from '../../types';
@@ -261,16 +261,41 @@ export class QueueProcessor {
           }
         } else {
           // Regular single item update
-          await putItem(STORES.ITEMS, result);
+          const isCreateOperation = operation.operationType === 'CREATE';
           
-          // Update React Query cache immediately with the new version
+          // For CREATE operations, delete the temp item and store the real one
+          if (isCreateOperation && resourceId !== result.id) {
+            await deleteItem(STORES.ITEMS, resourceId); // Delete temp item
+          }
+          
+          await putItem(STORES.ITEMS, result); // Store the real item
+          
+          // Update React Query cache
           if (parentId) {
             const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
-            const updatedItems = currentItems.map((item: Item) => 
-              item.id === resourceId ? { ...result, pending: false } : item
-            );
+            
+            // For CREATE operations, the resourceId is a temp ID, but result has the real server ID
+            // We need to remove the temp item and add the new one
+            const isCreateOperation = operation.operationType === 'CREATE';
+            
+            let updatedItems: Item[];
+            if (isCreateOperation) {
+              // Remove temp item and add server item
+              updatedItems = [
+                ...currentItems.filter((item: Item) => item.id !== resourceId),
+                { ...result, pending: false }
+              ];
+            } else {
+              // For UPDATE, just replace the item with matching ID
+              updatedItems = currentItems.map((item: Item) => 
+                item.id === resourceId ? { ...result, pending: false } : item
+              );
+            }
+            
             queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
-            queryClient.setQueryData(queryKeys.items.detail(parentId, resourceId), { ...result, pending: false });
+            
+            // Set the detail cache with the real server ID
+            queryClient.setQueryData(queryKeys.items.detail(parentId, result.id), { ...result, pending: false });
           }
         }
         break;
