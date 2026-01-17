@@ -8,6 +8,7 @@ import { listsApi } from '../services/api/lists';
 import { queryKeys } from '../services/api/queryClient';
 import { isNetworkError } from '../services/api/client';
 import { addToSyncQueue, getResourcesWithPendingDelete } from '../services/storage/syncQueue';
+import { queueProcessor } from '../services/offline/queueProcessor';
 import { cacheList, cacheLists, getCachedLists, removeCachedList } from '../services/storage/cacheManager';
 import { STORES, putItem } from '../services/storage/indexedDB';
 import type { List, CreateListRequest, UpdateListRequest } from '../types';
@@ -132,6 +133,7 @@ export const useCreateList = () => {
 
       // 2. Add to sync queue
       await addToSyncQueue('CREATE', 'LIST', tempId, data, 1);
+      queueProcessor.trigger();
 
       // 3. Optimistic update in React Query cache
       const currentLists = queryClient.getQueryData<List[]>(queryKeys.lists.all) || [];
@@ -184,6 +186,7 @@ export const useUpdateList = () => {
       
       // 2. Add to sync queue
       await addToSyncQueue('UPDATE', 'LIST', listId, data, data.version);
+      queueProcessor.trigger();
       
       // 3. Optimistic update in React Query cache
       queryClient.setQueryData(queryKeys.lists.detail(listId), updatedList);
@@ -211,6 +214,7 @@ export const useDeleteList = () => {
       
       // 1. Add to sync queue (delete will happen when synced)
       await addToSyncQueue('DELETE', 'LIST', listId, { version }, version);
+      queueProcessor.trigger();
       
       // 2. Remove from IndexedDB and caches immediately
       await removeCachedList(listId);

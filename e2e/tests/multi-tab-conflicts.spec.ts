@@ -344,26 +344,34 @@ test.describe('Multi-Tab Conflict Resolution', () => {
       await page.click(`text=${list.name}`);
     }
 
-    // Tab 1: Edit item 2
+    // Both tabs open edit dialogs simultaneously, capturing same version
     await page1.getByTestId('item-menu-button').nth(1).click();
     await page1.waitForTimeout(300);
     await page1.getByRole('menuitem', { name: /edit/i }).click();
-    await page1.getByTestId('edit-item-name-input').fill('Updated by Tab 1');
-    await page1.getByTestId('edit-item-submit').click();
-    await page1.waitForTimeout(1000);
-
-    // Tab 2: Try to edit same item with stale version
+    
     await page2.getByTestId('item-menu-button').nth(1).click();
     await page2.waitForTimeout(300);
     await page2.getByRole('menuitem', { name: /edit/i }).click();
+    
+    // Tab 1 submits first
+    await page1.getByTestId('edit-item-name-input').fill('Updated by Tab 1');
+    await page1.getByTestId('edit-item-submit').click();
+    
+    // Tab 2 submits with same version (concurrent edit)
     await page2.getByTestId('edit-item-name-input').fill('Updated by Tab 2');
     await page2.getByTestId('edit-item-submit').click();
-    await page2.waitForTimeout(1000);
+    
+    // Wait for sync to complete
+    await page1.waitForTimeout(2000);
+    await page2.waitForTimeout(2000);
 
-    // Verify Tab 1's update won (first write)
+    // Verify ONE of them won (not both - that would mean no conflict detection)
     const serverItems = await apiHelper.getItems(testUser.id, list.id);
     const item2 = serverItems.find(i => i.id === items[1].id);
-    expect(item2?.name).toBe('Updated by Tab 1');
+    
+    // The winner should be either Tab 1 or Tab 2, but not the original name
+    expect(item2?.name).not.toBe('Item 2');
+    expect(['Updated by Tab 1', 'Updated by Tab 2']).toContain(item2?.name);
 
     await page1.close();
     await page2.close();

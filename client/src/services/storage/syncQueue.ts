@@ -45,7 +45,7 @@ export const addToSyncQueue = async (
       item.resourceId === resourceId && 
       item.resourceType === resourceType &&
       item.parentId === parentId && // Also match parentId for proper deduplication
-      (item.status === 'PENDING' || item.status === 'FAILED')
+      (item.status === 'PENDING' || item.status === 'FAILED' || item.status === 'SYNCING')
   );
 
   // Deduplication logic:
@@ -61,11 +61,21 @@ export const addToSyncQueue = async (
     }
   } else if (operationType === 'UPDATE') {
     // Remove previous UPDATEs, but keep CREATE if it exists
+    // Preserve the original version from the first queued UPDATE
     const updatesToRemove = existingOps.filter(op => op.operationType === 'UPDATE');
+    let originalVersion = version;
+    if (updatesToRemove.length > 0) {
+      // Use the version from the first queued UPDATE
+      originalVersion = updatesToRemove[0].version;
+    }
+    
     for (const op of updatesToRemove) {
       await deleteItem(STORES.SYNC_QUEUE, op.id);
       console.log(`🔄 Replaced pending UPDATE for ${resourceType} ${resourceId}`);
     }
+    
+    // Use the original version for the new queue item
+    version = originalVersion;
   } else if (operationType === 'CREATE') {
     // Remove any previous CREATE (shouldn't normally happen)
     const createsToRemove = existingOps.filter(op => op.operationType === 'CREATE');

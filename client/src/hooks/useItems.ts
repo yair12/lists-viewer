@@ -8,6 +8,7 @@ import { itemsApi } from '../services/api/items';
 import { queryKeys } from '../services/api/queryClient';
 import { isNetworkError } from '../services/api/client';
 import { addToSyncQueue, getResourcesWithPendingDelete } from '../services/storage/syncQueue';
+import { queueProcessor } from '../services/offline/queueProcessor';
 import { 
   cacheItem, 
   cacheItems, 
@@ -211,6 +212,9 @@ export const useCreateItem = () => {
       // Add to sync queue
       await addToSyncQueue('CREATE', 'ITEM', tempId, data, 1, listId);
       
+      // Trigger immediate processing
+      queueProcessor.trigger();
+      
       // Optimistic update in React Query cache
       const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
       queryClient.setQueryData(queryKeys.items.byList(listId), [...currentItems, optimisticItem]);
@@ -276,7 +280,10 @@ export const useUpdateItem = () => {
       // 2. Add to sync queue with the current version (server will validate against this)
       await addToSyncQueue('UPDATE', 'ITEM', itemId, data, existingItem.version, listId);
 
-      // 3. Optimistic update in React Query cache
+      // 3. Trigger immediate processing
+      queueProcessor.trigger();
+
+      // 4. Optimistic update in React Query cache
       const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
       const updatedCache = currentItems.map(i => i.id === itemId ? updatedItem : i);
       queryClient.setQueryData(queryKeys.items.byList(listId), updatedCache);
@@ -311,10 +318,13 @@ export const useDeleteItem = () => {
       // 1. Add to sync queue (delete will happen when synced)
       await addToSyncQueue('DELETE', 'ITEM', itemId, { version }, version, listId);
       
-      // 2. Remove from IndexedDB and caches immediately
+      // 2. Trigger immediate processing
+      queueProcessor.trigger();
+      
+      // 3. Remove from IndexedDB and caches immediately
       await removeCachedItem(itemId);
       
-      // 3. Optimistically remove from React Query cache
+      // 4. Optimistically remove from React Query cache
       const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
       const filteredItems = currentItems.filter(item => item.id !== itemId);
       queryClient.setQueryData(queryKeys.items.byList(listId), filteredItems);

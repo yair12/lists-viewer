@@ -7,7 +7,7 @@ import {
   removeSyncItem,
   type SyncQueueItem,
 } from '../storage/syncQueue';
-import { STORES, getItem, putItem, deleteItem } from '../storage/indexedDB';
+import { STORES, putItem, deleteItem } from '../storage/indexedDB';
 import { getSyncDialogsInstance } from './syncDialogsStore';
 import { queryClient, queryKeys } from '../api/queryClient';
 import type { Item, List } from '../../types';
@@ -50,6 +50,15 @@ export class QueueProcessor {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
       console.log('🛑 QueueProcessor stopped');
+    }
+  }
+
+  /**
+   * Manually trigger queue processing (e.g., after queuing new operations)
+   */
+  async trigger() {
+    if (navigator.onLine && !this.processing) {
+      await this.processQueue();
     }
   }
 
@@ -137,27 +146,11 @@ export class QueueProcessor {
         const retryCount = (operation.retryCount || 0) + 1;
         await updateSyncItemStatus(operation.id, 'FAILED', error.message);
 
-        // If max retries exceeded, show error dialog
+        // If max retries exceeded, log error but don't show dialog
         if (retryCount >= 3) {
-          const localData = await this.getLocalData(operation);
-          const resourceName = localData ? (localData as any).name : operation.resourceId;
-
-          const dialogStore = getSyncDialogsInstance();
-          const action = await dialogStore.showErrorDialog(
-            operation.resourceType,
-            resourceName,
-            error.message || 'Unknown error occurred',
-            retryCount,
-            operation
-          );
-
-          if (action === 'discard') {
-            await removeSyncItem(operation.id);
-            console.log(`🗑️  Discarded failed operation: ${operation.id}`);
-          } else {
-            // Retry - reset retry count
-            await updateSyncItemStatus(operation.id, 'PENDING', '');
-          }
+          console.error(`❌ Max retries exceeded for ${operation.operationType} ${operation.resourceType} ${operation.resourceId}:`, error.message);
+          // Keep in queue with FAILED status - don't discard automatically
+          // User can manually resolve later if needed
         }
       }
     }
@@ -290,14 +283,13 @@ export class QueueProcessor {
               queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
               queryClient.setQueryData(queryKeys.items.detail(parentId, result.id), { ...result, pending: false });
             } else {
-              // For UPDATE: Remove pending item from cache and trigger refetch
-              // This will fetch the fresh data from IndexedDB (which now has the server response)
+              // For UPDATE: Replace the item in cache with server response
               const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
-              const updatedItems = currentItems.filter((item: Item) => item.id !== resourceId || !item.pending);
+              const updatedItems = currentItems.map((item: Item) =>
+                item.id === resourceId ? { ...result, pending: false } : item
+              );
               queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
-              
-              // Trigger a refetch to get the fresh data from IndexedDB
-              queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
+              queryClient.setQueryData(queryKeys.items.detail(parentId, result.id), { ...result, pending: false });
             }
           }
         }
@@ -403,22 +395,6 @@ export class QueueProcessor {
           ...serverData,
           name: listPayload.name ?? (serverData as List).name,
         } as List;
-      default:
-        return null;
-    }
-  }
-
-  /**
-   * Get local data for conflict resolution (DEPRECATED - use reconstructLocalData)
-   */
-  private async getLocalData(operation: SyncQueueItem): Promise<Item | List | null> {
-    const { resourceType, resourceId } = operation;
-
-    switch (resourceType) {
-      case 'ITEM':
-        return await getItem<Item>(STORES.ITEMS, resourceId);
-      case 'LIST':
-        return await getItem<List>(STORES.LISTS, resourceId);
       default:
         return null;
     }
