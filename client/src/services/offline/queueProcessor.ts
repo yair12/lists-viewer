@@ -123,7 +123,14 @@ export class QueueProcessor {
       console.error(`❌ Failed to sync operation ${operation.id}:`, error);
 
       // Handle version conflicts
-      if (error.response?.data?.error?.code === 'version_conflict' || error.response?.status === 409) {
+      // Note: axios interceptor returns error.response.data directly, so check both formats
+      const isVersionConflict = 
+        error.response?.data?.error?.code === 'version_conflict' || 
+        error.response?.status === 409 ||
+        error.error === 'version_conflict' ||
+        error.code === 'version_conflict';
+      
+      if (isVersionConflict) {
         await this.handleConflict(operation, error);
       } else {
         // Other errors - increment retry count
@@ -312,7 +319,9 @@ export class QueueProcessor {
       switch (resolution) {
         case 'server':
           // Accept server version - update local storage and remove from queue
-          await this.updateLocalStorage(operation, serverData);
+          // Ensure pending flag is cleared
+          const serverDataWithoutPending = { ...serverData, pending: false };
+          await this.updateLocalStorage(operation, serverDataWithoutPending);
           await removeSyncItem(operation.id);
           console.log(`✅ Conflict resolved: using server version`);
           break;
@@ -320,7 +329,8 @@ export class QueueProcessor {
         case 'local':
           // Force update with local version
           const updated = await this.forceUpdate(operation, localData, serverData);
-          await this.updateLocalStorage(operation, updated);
+          const updatedWithoutPending = { ...updated, pending: false };
+          await this.updateLocalStorage(operation, updatedWithoutPending);
           await removeSyncItem(operation.id);
           console.log(`✅ Conflict resolved: using local version`);
           break;

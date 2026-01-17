@@ -25,6 +25,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
   const [description, setDescription] = useState(item.description || '');
   const [quantity, setQuantity] = useState(item.quantity?.toString() || '');
   const [quantityType, setQuantityType] = useState<string>(item.quantityType || QUANTITY_TYPES[0]);
+  const [capturedVersion, setCapturedVersion] = useState(item.version);
   const updateMutation = useUpdateItem();
 
   useEffect(() => {
@@ -33,6 +34,8 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
       setDescription(item.description || '');
       setQuantity(item.quantity?.toString() || '');
       setQuantityType(item.quantityType || QUANTITY_TYPES[0]);
+      // Capture version when dialog opens - don't update it even if item changes
+      setCapturedVersion(item.version);
     }
   }, [open, item]);
 
@@ -42,7 +45,7 @@ export default function EditItemDialog({ open, onClose, item, listId }: EditItem
 
     const payload: UpdateItemRequest = {
       name: name.trim(),
-      version: item.version,
+      version: capturedVersion, // Use the captured version, not item.version
       ...(item.type === 'list' && description && { description: description.trim() }),
       ...(item.type === 'item' && quantity && { quantity: parseFloat(quantity) }),
       ...(item.type === 'item' && quantity && { quantityType }),

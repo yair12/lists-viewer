@@ -77,27 +77,36 @@ test.describe('Multi-Tab Conflict Resolution', () => {
       await page.click(`text=${list.name}`);
     }
 
-    // Tab 1: Update item first
+    // Tab 2: Open edit dialog FIRST to capture original version
+    await page2.getByTestId('item-menu-button').first().click();
+    await page2.waitForTimeout(300);
+    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page2.waitForTimeout(500); // Wait for dialog to fully load with original data
+    
+    // Tab 1: Update item (this will increment version)
     await page1.getByTestId('item-menu-button').first().click();
     await page1.waitForTimeout(300);
     await page1.getByRole('menuitem', { name: /edit/i }).click();
     await page1.getByTestId('edit-item-name-input').fill('First Update');
     await page1.getByTestId('edit-item-quantity-input').fill('10');
     await page1.getByTestId('edit-item-submit').click();
-    await page1.waitForTimeout(1000);
-
-    // Tab 2: Try to update same item with stale version (will fail)
-    await page2.getByTestId('item-menu-button').first().click();
-    await page2.waitForTimeout(300);
-    await page2.getByRole('menuitem', { name: /edit/i }).click();
+    await page1.waitForTimeout(1000); // Wait for update to complete
+    
+    // Tab 2: Now submit with stale version (will trigger conflict)
     await page2.getByTestId('edit-item-name-input').fill('Second Update');
     await page2.getByTestId('edit-item-quantity-input').fill('5');
     await page2.getByTestId('edit-item-submit').click();
-    await page2.waitForTimeout(1000);
 
-    // Refresh Tab 2 to see server version
-    await page2.reload();
-    await page2.waitForLoadState('networkidle');
+    // Wait for conflict dialog to appear
+    await page2.waitForTimeout(2000);
+    const conflictDialog = page2.getByRole('dialog').filter({ hasText: /conflict/i });
+    await conflictDialog.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Accept server version (first-write-wins)
+    await page2.getByRole('button', { name: /use server version/i }).click();
+    
+    // Wait for conflict resolution to complete
+    await page2.waitForTimeout(1000);
 
     // Verify server kept first update
     const serverItems = await apiHelper.getItems(testUser.id, list.id);
