@@ -233,11 +233,17 @@ export class QueueProcessor {
    */
   private async updateLocalStorage(operation: SyncQueueItem, result: any) {
     if (!result) {
-      // Delete operations - invalidate cache
-      const { resourceType, parentId } = operation;
-      if (resourceType === 'ITEM' && parentId) {
-        queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
+      // Delete operations - remove from IndexedDB and invalidate cache
+      const { resourceType, resourceId, parentId } = operation;
+      
+      // Delete from IndexedDB
+      if (resourceType === 'ITEM') {
+        await deleteItem(STORES.ITEMS, resourceId);
+        if (parentId) {
+          queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
+        }
       } else if (resourceType === 'LIST') {
+        await deleteItem(STORES.LISTS, resourceId);
         queryClient.invalidateQueries({ queryKey: queryKeys.lists.all });
       }
       return;
@@ -268,30 +274,31 @@ export class QueueProcessor {
             await deleteItem(STORES.ITEMS, resourceId); // Delete temp item
           }
           
-          await putItem(STORES.ITEMS, result); // Store the real item
+          // Store the server result without pending flag
+          await putItem(STORES.ITEMS, { ...result, pending: false });
           
           // Update React Query cache
           if (parentId) {
-            const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
-            
-            let updatedItems: Item[];
             if (isCreateOperation) {
               // For CREATE: Remove temp item and add server item
-              updatedItems = [
+              const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
+              const updatedItems = [
                 ...currentItems.filter((item: Item) => item.id !== resourceId),
                 { ...result, pending: false }
               ];
+              
+              queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
+              queryClient.setQueryData(queryKeys.items.detail(parentId, result.id), { ...result, pending: false });
             } else {
-              // For UPDATE: Replace the item with matching ID, preserve order
-              updatedItems = currentItems.map((item: Item) => 
-                item.id === result.id ? { ...result, pending: false } : item
-              );
+              // For UPDATE: Remove pending item from cache and trigger refetch
+              // This will fetch the fresh data from IndexedDB (which now has the server response)
+              const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(parentId)) || [];
+              const updatedItems = currentItems.filter((item: Item) => item.id !== resourceId || !item.pending);
+              queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
+              
+              // Trigger a refetch to get the fresh data from IndexedDB
+              queryClient.invalidateQueries({ queryKey: queryKeys.items.byList(parentId) });
             }
-            
-            queryClient.setQueryData(queryKeys.items.byList(parentId), updatedItems);
-            
-            // Set the detail cache with the real server ID
-            queryClient.setQueryData(queryKeys.items.detail(parentId, result.id), { ...result, pending: false });
           }
         }
         break;
@@ -318,12 +325,21 @@ export class QueueProcessor {
     console.warn(`⚠️  Conflict detected for ${operation.resourceType} ${operation.resourceId}`);
 
     try {
-      // Get local and server data
-      const localData = await this.getLocalData(operation);
+      // Get server data (current state on server)
       const serverData = await this.getServerData(operation);
 
-      if (!localData || !serverData) {
-        // Data not found, remove from queue
+      if (!serverData) {
+        // Data not found on server, remove from queue
+        await removeSyncItem(operation.id);
+        return;
+      }
+
+      // Get local changes from the operation payload
+      // This represents what the user tried to change
+      const localData = await this.reconstructLocalData(operation, serverData);
+
+      if (!localData) {
+        // Can't reconstruct local data, remove from queue
         await removeSyncItem(operation.id);
         return;
       }
@@ -332,8 +348,8 @@ export class QueueProcessor {
       const dialogStore = getSyncDialogsInstance();
       const resolution = await dialogStore.showConflictDialog(
         operation.resourceType,
-        localData,
-        serverData,
+        localData, // User's pending changes
+        serverData, // Current server state
         operation
       );
 
@@ -363,7 +379,37 @@ export class QueueProcessor {
   }
 
   /**
-   * Get local data for conflict resolution
+   * Reconstruct local data by applying the queued changes to server data
+   * This shows what the user was trying to change
+   */
+  private async reconstructLocalData(operation: SyncQueueItem, serverData: Item | List): Promise<Item | List | null> {
+    const { resourceType, payload } = operation;
+
+    switch (resourceType) {
+      case 'ITEM':
+        const itemPayload = payload as any;
+        return {
+          ...serverData,
+          name: itemPayload.name ?? (serverData as Item).name,
+          completed: itemPayload.completed ?? (serverData as Item).completed,
+          quantity: itemPayload.quantity ?? (serverData as Item).quantity,
+          quantityType: itemPayload.quantityType ?? (serverData as Item).quantityType,
+          order: itemPayload.order ?? (serverData as Item).order,
+          description: itemPayload.description ?? (serverData as Item).description,
+        } as Item;
+      case 'LIST':
+        const listPayload = payload as any;
+        return {
+          ...serverData,
+          name: listPayload.name ?? (serverData as List).name,
+        } as List;
+      default:
+        return null;
+    }
+  }
+
+  /**
+   * Get local data for conflict resolution (DEPRECATED - use reconstructLocalData)
    */
   private async getLocalData(operation: SyncQueueItem): Promise<Item | List | null> {
     const { resourceType, resourceId } = operation;

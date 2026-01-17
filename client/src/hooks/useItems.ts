@@ -44,7 +44,34 @@ export const useItems = (listId: string | null, includeArchived = false) => {
         // Filter out items with pending DELETE operations
         const pendingDeletes = await getResourcesWithPendingDelete('ITEM');
         const filteredItems = items.filter(item => !pendingDeletes.includes(item.id));
-        return filteredItems;
+        
+        // Merge with existing React Query cache to preserve optimistic updates
+        const existingCache = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
+        
+        // Build a map of fetched items by ID
+        const fetchedMap = new Map(filteredItems.map((i: Item) => [i.id, i]));
+        
+        // Merge: use cached item if it's pending (optimistic update), otherwise use fetched
+        const mergedItems = existingCache.map((cachedItem: Item) => {
+          const fetchedItem = fetchedMap.get(cachedItem.id);
+          if (fetchedItem) {
+            // Item exists in both cache and fetched data
+            // If cached item is pending, keep the cached version (optimistic update)
+            // Otherwise use the fetched version
+            return cachedItem.pending ? cachedItem : fetchedItem;
+          }
+          // Item only in cache (new optimistic item)
+          return cachedItem.pending ? cachedItem : null;
+        }).filter((item): item is Item => item !== null);
+        
+        // Add any items that are in fetched but not in cache
+        filteredItems.forEach((fetchedItem: Item) => {
+          if (!existingCache.find((i: Item) => i.id === fetchedItem.id)) {
+            mergedItems.push(fetchedItem);
+          }
+        });
+        
+        return mergedItems;
       } catch (error) {
         // If network error, return cached data (don't throw)
         if (isNetworkError(error)) {
@@ -70,10 +97,31 @@ export const useItems = (listId: string | null, includeArchived = false) => {
         
         // Merge with existing cache to preserve optimistic updates
         const existingCache = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
-        const cachedIds = new Set(filteredItems.map((i: Item) => i.id));
-        const optimisticItems = existingCache.filter((i: Item) => !cachedIds.has(i.id) && i.pending);
         
-        return [...filteredItems, ...optimisticItems];
+        // Build a map of fetched items by ID
+        const fetchedMap = new Map(filteredItems.map((i: Item) => [i.id, i]));
+        
+        // Merge: use cached item if it's pending (optimistic update), otherwise use fetched
+        const mergedItems = existingCache.map((cachedItem: Item) => {
+          const fetchedItem = fetchedMap.get(cachedItem.id);
+          if (fetchedItem) {
+            // Item exists in both cache and fetched data
+            // If cached item is pending, keep the cached version (optimistic update)
+            // Otherwise use the fetched version
+            return cachedItem.pending ? cachedItem : fetchedItem;
+          }
+          // Item only in cache (new optimistic item)
+          return cachedItem.pending ? cachedItem : null;
+        }).filter((item): item is Item => item !== null);
+        
+        // Add any items that are in fetched but not in cache
+        filteredItems.forEach((fetchedItem: Item) => {
+          if (!existingCache.find((i: Item) => i.id === fetchedItem.id)) {
+            mergedItems.push(fetchedItem);
+          }
+        });
+        
+        return mergedItems;
       }
     },
     enabled: !!listId,
@@ -218,15 +266,15 @@ export const useUpdateItem = () => {
         order: data.order ?? existingItem.order,
         description: data.description ?? existingItem.description,
         updatedAt: new Date().toISOString(),
-        version: data.version,
+        version: existingItem.version, // Keep same version - server will increment
         pending: true, // Mark as pending sync
       };
 
       // 1. Save to IndexedDB
       await putItem(STORES.ITEMS, updatedItem);
       
-      // 2. Add to sync queue
-      await addToSyncQueue('UPDATE', 'ITEM', itemId, data, data.version, listId);
+      // 2. Add to sync queue with the current version (server will validate against this)
+      await addToSyncQueue('UPDATE', 'ITEM', itemId, data, existingItem.version, listId);
 
       // 3. Optimistic update in React Query cache
       const currentItems = queryClient.getQueryData<Item[]>(queryKeys.items.byList(listId)) || [];
